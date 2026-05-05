@@ -33,6 +33,15 @@ def lambda_event() -> dict[str, Any]:
 
 
 @pytest.fixture
+def pdf_event() -> dict[str, Any]:
+    """Sample PDF processing event from Step Function."""
+    return {
+        "s3_bucket": "datalake-raw-dev",
+        "s3_key": "clinical/documents/report.pdf",
+    }
+
+
+@pytest.fixture
 def lambda_context() -> Any:
     """Mock Lambda context."""
 

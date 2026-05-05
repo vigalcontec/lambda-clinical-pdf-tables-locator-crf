@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "my-lambda-function"
+name = "lambda-clinical-pdf-tables-locator"
 version = "0.1.0"
-description = "AWS Lambda function template with Python and Docker"
-authors = ["Your Name <your.email@example.com>"]
+description = "Lambda function to identify pages with tables in clinical PDF documents"
+authors = ["Vigalcontec"]
 readme = "README.md"
 packages = [{include = "handler", from = "src"}]
 
@@ -12,6 +12,7 @@ aws-lambda-powertools = {extras = ["tracer"], version = "^2.34.0"}
 boto3 = "^1.34.0"
 pydantic = "^2.6.0"
 pydantic-settings = "^2.2.0"
+pymupdf = "^1.24.0"  # PDF processing library (imported as fitz)
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
