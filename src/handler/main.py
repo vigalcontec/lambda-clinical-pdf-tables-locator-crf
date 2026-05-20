@@ -88,25 +88,25 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
 
         # Download PDF
         pdf_bytes = download_pdf_from_s3(bucket, key)
-        
+
         if len(pdf_bytes) == 0:
             raise ValueError(f"Downloaded PDF is empty: s3://{bucket}/{key}")
-        
+
         logger.info("PDF downloaded", extra={"size_bytes": len(pdf_bytes)})
 
         # Generate hash for idempotency
         file_hash = generate_file_hash(pdf_bytes)
-        
+
         # Analyze PDF pages
         total_pages = get_total_pages(pdf_bytes)
         page_info = analyze_pdf_pages(pdf_bytes)
-        
+
         # Generate Textract events (self-contained for Distributed Map)
         textract_events = generate_textract_events(page_info, bucket, key, product_name)
-        
+
         # Count unique tables
         unique_tables = len(set(e["table_number"] for e in textract_events))
-        
+
         logger.info(
             "Analysis completed",
             extra={
@@ -138,37 +138,37 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
         }
 
 
-if __name__ == "__main__":
-    import json
-    import os
-    
-    os.environ.setdefault("POWERTOOLS_TRACE_DISABLED", "true")
+# if __name__ == "__main__":
+#     import json
+#     import os
 
-    # Lambda simulation with S3 event
-    class MockContext:
-        function_name = "local-test"
-        memory_limit_in_mb = 256
-        invoked_function_arn = "arn:aws:lambda:eu-west-1:123456789012:function:local-test"
-        aws_request_id = "local-request-id"
+#     os.environ.setdefault("POWERTOOLS_TRACE_DISABLED", "true")
 
-    # Test event with product_name extracted from s3_key path
-    # Format: path/product_name/yyyymmddhhmmss/document.pdf
-    test_event = {
-        "s3_bucket": "datalake-raw-vigalcontec-dev-002332700133",
-        "s3_key": "crf/clinical_pdfs/Keytruda/20260520173800/keytruda-epar-product-information_en.pdf",
-    }
-    
-    result = handler(test_event, MockContext())
-    
-    logger.info(
-        "Handler result",
-        extra={
-            "status": result["status"],
-            "product_name": result.get("product_name"),
-            "total_tables": result.get("total_tables"),
-            "events_count": len(result.get("textract_events", [])),
-        }
-    )
-    
-    # Pretty print the result
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+#     # Lambda simulation with S3 event
+#     class MockContext:
+#         function_name = "local-test"
+#         memory_limit_in_mb = 256
+#         invoked_function_arn = "arn:aws:lambda:eu-west-1:123456789012:function:local-test"
+#         aws_request_id = "local-request-id"
+
+#     # Test event with product_name extracted from s3_key path
+#     # Format: path/product_name/yyyymmddhhmmss/document.pdf
+#     test_event = {
+#         "s3_bucket": "datalake-raw-vigalcontec-dev-002332700133",
+#         "s3_key": "crf/clinical_pdfs/Keytruda/20260520173800/keytruda-epar-product-information_en.pdf",
+#     }
+
+#     result = handler(test_event, MockContext())
+
+#     logger.info(
+#         "Handler result",
+#         extra={
+#             "status": result["status"],
+#             "product_name": result.get("product_name"),
+#             "total_tables": result.get("total_tables"),
+#             "events_count": len(result.get("textract_events", [])),
+#         }
+#     )
+
+#     # Pretty print the result
+#     print(json.dumps(result, indent=2, ensure_ascii=False))

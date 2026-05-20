@@ -14,11 +14,11 @@ s3_client = boto3.client("s3")
 @tracer.capture_method
 def download_pdf_from_s3(bucket: str, key: str) -> bytes:
     """Download PDF from S3 directly into memory.
-    
+
     Args:
         bucket: S3 bucket name
         key: S3 object key
-        
+
     Returns:
         PDF file content as bytes
     """
@@ -30,10 +30,10 @@ def download_pdf_from_s3(bucket: str, key: str) -> bytes:
 @tracer.capture_method
 def generate_file_hash(pdf_bytes: bytes) -> str:
     """Generate SHA256 hash for idempotency checks.
-    
+
     Args:
         pdf_bytes: PDF file content as bytes
-        
+
     Returns:
         SHA256 hash string
     """
