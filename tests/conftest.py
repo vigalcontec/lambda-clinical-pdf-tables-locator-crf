@@ -27,17 +27,15 @@ def env_vars() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def lambda_event() -> dict[str, Any]:
-    """Sample Lambda event."""
-    return {"key1": "value1", "key2": "value2"}
-
-
-@pytest.fixture
 def pdf_event() -> dict[str, Any]:
-    """Sample PDF processing event from Step Function."""
+    """Sample PDF processing event from Step Function.
+    
+    Format: s3_key = path/product_name/yyyymmddhhmmss/document.pdf
+    Product name is extracted from the path (second-to-last directory).
+    """
     return {
         "s3_bucket": "datalake-raw-dev",
-        "s3_key": "clinical/documents/report.pdf",
+        "s3_key": "crf/clinical_pdfs/Keytruda/20260520173800/report.pdf",
     }
 
 
@@ -52,3 +50,37 @@ def lambda_context() -> Any:
         aws_request_id = "test-request-id"
 
     return MockContext()
+
+
+@pytest.fixture
+def sample_page_info() -> list[dict[str, Any]]:
+    """Sample page analysis info for testing textract event generation."""
+    return [
+        {
+            "page": 7,
+            "table_identifiers": [{"table_number": 1, "description": "Recommended dose"}],
+            "tables_count": 1,
+            "has_table_structure": True,
+        },
+        {
+            "page": 8,
+            "table_identifiers": [],
+            "tables_count": 1,
+            "has_table_structure": True,
+        },
+        {
+            "page": 9,
+            "table_identifiers": [],
+            "tables_count": 0,
+            "has_table_structure": False,
+        },
+        {
+            "page": 32,
+            "table_identifiers": [
+                {"table_number": 6, "description": "Efficacy results KEYNOTE-002"},
+                {"table_number": 7, "description": "Efficacy results KEYNOTE-006"},
+            ],
+            "tables_count": 2,
+            "has_table_structure": True,
+        },
+    ]

@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-05-20
+
+### Added
+
+- **Textract Events Output** - Generates self-contained events for Step Functions Distributed Map
+- **Product Name Extraction** - Automatically extracted from S3 key path
+- **Multi-page Table Support** - Continuation pages inherit table info from previous page
+- **Multiple Tables per Page** - Tracks `table_index_on_page` for pages with multiple tables
+- **Modular Architecture** - Split code into utils modules (s3.py, pdf.py, textract_events.py)
+
+### Changed
+
+- **Output Format** - Now returns `textract_events` array instead of `page_groups`
+- **Input Contract** - Removed `product_name` from input, extracted from `s3_key` path
+- **Handler Returns FAILED** - Instead of raising exceptions, returns error status
+- **Logging** - Replaced print statements with structured PowerTools logging
+
+### Input/Output Contract
+
+**Input:**
+```json
+{
+    "s3_bucket": "bucket-name",
+    "s3_key": "path/product_name/yyyymmddhhmmss/document.pdf"
+}
+```
+
+**Output:**
+```json
+{
+    "status": "SUCCESS",
+    "s3_bucket": "bucket-name",
+    "s3_key": "path/product_name/yyyymmddhhmmss/document.pdf",
+    "product_name": "product_name",
+    "file_hash": "sha256-hash",
+    "total_pages": 100,
+    "total_tables": 25,
+    "textract_events": [
+        {
+            "s3_bucket": "bucket-name",
+            "s3_key": "path/product_name/yyyymmddhhmmss/document.pdf",
+            "product_name": "product_name",
+            "table_name": "Table 1: ...",
+            "table_number": 1,
+            "page": 7,
+            "table_index_on_page": 0
+        }
+    ]
+}
+```
+
+---
+
 ## [1.0.0] - 2026-04-30
 
 ### Added
