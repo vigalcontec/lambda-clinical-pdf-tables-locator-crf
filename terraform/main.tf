@@ -75,16 +75,8 @@ resource "aws_lambda_function" "main" {
       POWERTOOLS_SERVICE_NAME      = local.function_name
       POWERTOOLS_METRICS_NAMESPACE = local.project_name
 
-      # Datalake configuration (from SSM via Terraform)
-      RAW_BUCKET_NAME      = local.datalake.raw.bucket_name
-      RAW_BUCKET_ARN       = local.datalake.raw.bucket_arn
-      RAW_KMS_KEY_ARN      = local.datalake.raw.kms_key_arn
-      STAGING_BUCKET_NAME  = local.datalake.staging.bucket_name
-      STAGING_BUCKET_ARN   = local.datalake.staging.bucket_arn
-      STAGING_KMS_KEY_ARN  = local.datalake.staging.kms_key_arn
-      BUSINESS_BUCKET_NAME = local.datalake.business.bucket_name
-      BUSINESS_BUCKET_ARN  = local.datalake.business.bucket_arn
-      BUSINESS_KMS_KEY_ARN = local.datalake.business.kms_key_arn
+      # Datalake RAW bucket (source PDFs)
+      RAW_BUCKET_NAME = local.datalake.raw.bucket_name
     }
   }
 

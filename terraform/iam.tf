@@ -1,6 +1,11 @@
 # =============================================================================
-# IAM Role and Policies for Lambda
+# IAM Role and Policies for Lambda - Clinical PDF Tables Locator
 # =============================================================================
+# This Lambda only needs:
+# - S3 GetObject on RAW bucket (to download PDFs)
+# - KMS Decrypt on RAW bucket KMS key (to decrypt PDFs)
+# - CloudWatch Logs (basic execution)
+# - X-Ray tracing
 
 # -----------------------------------------------------------------------------
 # Lambda Execution Role
@@ -43,31 +48,23 @@ resource "aws_iam_role_policy_attachment" "lambda_xray" {
 }
 
 # -----------------------------------------------------------------------------
-# S3 Access to Datalake Buckets
+# S3 Read Access - RAW Bucket Only
 # -----------------------------------------------------------------------------
-resource "aws_iam_role_policy" "s3_access" {
-  name = "${local.full_name}-s3"
+resource "aws_iam_role_policy" "s3_read" {
+  name = "${local.full_name}-s3-read"
   role = aws_iam_role.lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "S3ReadWrite"
+        Sid    = "S3GetObject"
         Effect = "Allow"
         Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:GetObject"
         ]
         Resource = [
-          "${local.datalake.raw.bucket_arn}",
-          "${local.datalake.raw.bucket_arn}/*",
-          "${local.datalake.staging.bucket_arn}",
-          "${local.datalake.staging.bucket_arn}/*",
-          "${local.datalake.business.bucket_arn}",
-          "${local.datalake.business.bucket_arn}/*"
+          "${local.datalake.raw.bucket_arn}/*"
         ]
       }
     ]
@@ -75,26 +72,23 @@ resource "aws_iam_role_policy" "s3_access" {
 }
 
 # -----------------------------------------------------------------------------
-# KMS Access for Datalake Encryption
+# KMS Decrypt - RAW Bucket KMS Key Only
 # -----------------------------------------------------------------------------
-resource "aws_iam_role_policy" "kms_access" {
-  name = "${local.full_name}-kms"
+resource "aws_iam_role_policy" "kms_decrypt" {
+  name = "${local.full_name}-kms-decrypt"
   role = aws_iam_role.lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "KMSDecryptEncrypt"
+        Sid    = "KMSDecrypt"
         Effect = "Allow"
         Action = [
-          "kms:Decrypt",
-          "kms:GenerateDataKey"
+          "kms:Decrypt"
         ]
         Resource = [
-          local.datalake.raw.kms_key_arn,
-          local.datalake.staging.kms_key_arn,
-          local.datalake.business.kms_key_arn
+          local.datalake.raw.kms_key_arn
         ]
       }
     ]

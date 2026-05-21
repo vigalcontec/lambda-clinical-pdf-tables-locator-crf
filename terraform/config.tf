@@ -6,8 +6,8 @@ locals {
   # ─────────────────────────────────────────────────────────────────────────────
   # Project Configuration (UPDATE THESE)
   # ─────────────────────────────────────────────────────────────────────────────
-  function_name = "my-lambda-function"  # Lambda function name (without env suffix)
-  project_name  = "my-project"          # Project name for tagging
+  function_name = "clinical-pdf-tables-locator-crf"  # Lambda function name (without env suffix)
+  project_name  = "clinical-rag-foundry"          # Project name for tagging
   company_name  = "vigalcontec"         # Company name for resource naming
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -18,10 +18,10 @@ locals {
   # ─────────────────────────────────────────────────────────────────────────────
   # Lambda Configuration
   # ─────────────────────────────────────────────────────────────────────────────
-  timeout            = 30    # Lambda timeout in seconds
+  timeout            = 120    # Lambda timeout in seconds
   memory_size        = 256   # Lambda memory in MB
   log_level          = "INFO"
-  log_retention_days = 30
+  log_retention_days = 5
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Computed Values (DO NOT MODIFY)
