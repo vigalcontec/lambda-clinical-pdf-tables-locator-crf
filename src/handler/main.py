@@ -32,7 +32,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
             "s3_bucket": "bucket-name",
             "s3_key": "path/product_name/yyyymmddhhmmss/document.pdf"
         }
-    
+
     The product_name is extracted from the s3_key path (second-to-last directory).
 
     Returns:
@@ -57,7 +57,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
                 ...
             ]
         }
-        
+
     Step Functions Distributed Map uses $.textract_events as ItemsPath,
     and each event is self-contained for the Textract lambda.
     """
@@ -105,7 +105,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
         textract_events = generate_textract_events(page_info, bucket, key, product_name)
 
         # Count unique tables
-        unique_tables = len(set(e["table_number"] for e in textract_events))
+        unique_tables = len({e["table_number"] for e in textract_events})
 
         logger.info(
             "Analysis completed",
