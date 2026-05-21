@@ -24,7 +24,8 @@ def download_pdf_from_s3(bucket: str, key: str) -> bytes:
     """
     logger.info("Downloading PDF from S3", extra={"bucket": bucket, "key": key})
     response = s3_client.get_object(Bucket=bucket, Key=key)
-    return response["Body"].read()
+    content: bytes = response["Body"].read()
+    return content
 
 
 @tracer.capture_method
