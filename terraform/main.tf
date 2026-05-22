@@ -109,10 +109,10 @@ resource "aws_cloudwatch_log_group" "lambda" {
 # Lambda Permission (for triggers - customize as needed)
 # -----------------------------------------------------------------------------
 # Example: S3 trigger
-# resource "aws_lambda_permission" "s3" {
-#   statement_id  = "AllowS3Invoke"
-#   action        = "lambda:InvokeFunction"
-#   function_name = aws_lambda_function.main.function_name
-#   principal     = "s3.amazonaws.com"
-#   source_arn    = local.datalake.raw.bucket_arn
-# }
+resource "aws_lambda_permission" "s3" {
+   statement_id  = "AllowS3Invoke"
+   action        = "lambda:InvokeFunction"
+   function_name = aws_lambda_function.main.function_name
+   principal     = "s3.amazonaws.com"
+   source_arn    = local.datalake.raw.bucket_arn
+   }
