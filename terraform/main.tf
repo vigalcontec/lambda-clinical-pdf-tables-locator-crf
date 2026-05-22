@@ -106,13 +106,28 @@ resource "aws_cloudwatch_log_group" "lambda" {
 }
 
 # -----------------------------------------------------------------------------
-# Lambda Permission (for triggers - customize as needed)
+# Lambda Permission - Allow S3 to invoke Lambda
 # -----------------------------------------------------------------------------
-# Example: S3 trigger
 resource "aws_lambda_permission" "s3" {
-   statement_id  = "AllowS3Invoke"
-   action        = "lambda:InvokeFunction"
-   function_name = aws_lambda_function.main.function_name
-   principal     = "s3.amazonaws.com"
-   source_arn    = local.datalake.raw.bucket_arn
-   }
+  statement_id  = "AllowS3Invoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.main.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = local.datalake.raw.bucket_arn
+}
+
+# -----------------------------------------------------------------------------
+# S3 Bucket Notification - Trigger Lambda on object creation
+# -----------------------------------------------------------------------------
+resource "aws_s3_bucket_notification" "lambda_trigger" {
+  bucket = local.datalake.raw.bucket_name
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.main.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "crf/clinical_pdfs/"
+    filter_suffix       = ".pdf"
+  }
+
+  depends_on = [aws_lambda_permission.s3]
+}
