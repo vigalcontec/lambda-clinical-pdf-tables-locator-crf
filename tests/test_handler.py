@@ -109,6 +109,101 @@ class TestHandler:
         assert result["status"] == "FAILED"
         assert "Missing 's3_bucket' or 's3_key'" in result["error"]
 
+    @patch("handler.main.generate_textract_events")
+    @patch("handler.main.analyze_pdf_pages")
+    @patch("handler.main.get_total_pages")
+    @patch("handler.main.generate_file_hash")
+    @patch("handler.main.download_pdf_from_s3")
+    def test_handler_s3_trigger_format(
+        self,
+        mock_download: MagicMock,
+        mock_hash: MagicMock,
+        mock_total_pages: MagicMock,
+        mock_analyze: MagicMock,
+        mock_generate_events: MagicMock,
+        lambda_context: Any,
+    ) -> None:
+        """Test handler with S3 trigger event format."""
+        get_settings.cache_clear()
+
+        mock_download.return_value = b"fake pdf content"
+        mock_hash.return_value = "abc123hash"
+        mock_total_pages.return_value = 50
+        mock_analyze.return_value = []
+        mock_generate_events.return_value = []
+
+        from handler.main import handler
+
+        # S3 trigger event format
+        s3_event = {
+            "Records": [
+                {
+                    "s3": {
+                        "bucket": {"name": "datalake-raw-dev"},
+                        "object": {"key": "crf/clinical_pdfs/Keytruda/20260520/doc.pdf"}
+                    }
+                }
+            ]
+        }
+
+        result = handler(s3_event, lambda_context)
+
+        assert result["status"] == "SUCCESS"
+        assert result["s3_bucket"] == "datalake-raw-dev"
+        assert result["s3_key"] == "crf/clinical_pdfs/Keytruda/20260520/doc.pdf"
+        assert result["product_name"] == "Keytruda"
+        mock_download.assert_called_once_with(
+            "datalake-raw-dev",
+            "crf/clinical_pdfs/Keytruda/20260520/doc.pdf"
+        )
+
+    @patch("handler.main.generate_textract_events")
+    @patch("handler.main.analyze_pdf_pages")
+    @patch("handler.main.get_total_pages")
+    @patch("handler.main.generate_file_hash")
+    @patch("handler.main.download_pdf_from_s3")
+    def test_handler_s3_trigger_url_encoded_key(
+        self,
+        mock_download: MagicMock,
+        mock_hash: MagicMock,
+        mock_total_pages: MagicMock,
+        mock_analyze: MagicMock,
+        mock_generate_events: MagicMock,
+        lambda_context: Any,
+    ) -> None:
+        """Test handler decodes URL-encoded S3 keys from trigger."""
+        get_settings.cache_clear()
+
+        mock_download.return_value = b"fake pdf content"
+        mock_hash.return_value = "hash"
+        mock_total_pages.return_value = 10
+        mock_analyze.return_value = []
+        mock_generate_events.return_value = []
+
+        from handler.main import handler
+
+        # S3 encodes spaces as + and special chars as %XX
+        s3_event = {
+            "Records": [
+                {
+                    "s3": {
+                        "bucket": {"name": "bucket"},
+                        "object": {"key": "path/My+Product/2026/file+name.pdf"}
+                    }
+                }
+            ]
+        }
+
+        result = handler(s3_event, lambda_context)
+
+        assert result["status"] == "SUCCESS"
+        # Key should be decoded
+        assert result["s3_key"] == "path/My Product/2026/file name.pdf"
+        mock_download.assert_called_once_with(
+            "bucket",
+            "path/My Product/2026/file name.pdf"
+        )
+
 
 class TestS3Utils:
     """Tests for S3 utility functions."""

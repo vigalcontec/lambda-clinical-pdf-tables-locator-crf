@@ -5,6 +5,7 @@ and generates events for downstream Textract processing.
 """
 
 from typing import Any
+from urllib.parse import unquote_plus
 
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -65,9 +66,19 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
     logger.info("Starting PDF table locator", extra={"environment": settings.environment})
 
     try:
-        # Validate input
-        bucket = event.get("s3_bucket")
-        key = event.get("s3_key")
+        # Extract bucket and key from event
+        # Support both S3 trigger format and direct invocation format
+        if "Records" in event:
+            # S3 trigger format
+            record = event["Records"][0]
+            bucket = record["s3"]["bucket"]["name"]
+            key = record["s3"]["object"]["key"]
+            # URL decode the key (S3 encodes special characters)
+            key = unquote_plus(key)
+        else:
+            # Direct invocation format
+            bucket = event.get("s3_bucket")
+            key = event.get("s3_key")
 
         if not bucket or not key:
             raise ValueError("Missing 's3_bucket' or 's3_key' in event payload.")
