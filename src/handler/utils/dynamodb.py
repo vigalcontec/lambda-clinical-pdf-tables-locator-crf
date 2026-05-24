@@ -1,6 +1,6 @@
 """DynamoDB utility functions for job tracking."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any
 
@@ -48,7 +48,7 @@ def create_job_record(
         The created DynamoDB item
     """
     table = _get_dynamodb_resource().Table(table_name)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ttl = int(now.timestamp()) + (ttl_days * 24 * 60 * 60)
 
     item = {
@@ -94,7 +94,7 @@ def update_job_status(
         error_message: Optional error message for FAILED status
     """
     table = _get_dynamodb_resource().Table(table_name)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     update_expr = "SET #status = :status, updated_at = :updated_at"
     expr_values: dict[str, Any] = {

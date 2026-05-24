@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     environment: str  # ENVIRONMENT - "dev", "qa", "prod"
     dynamodb_table_name: str  # DYNAMODB_TABLE_NAME - from SSM
     output_s3_bucket: str  # OUTPUT_S3_BUCKET - from SSM (RAW bucket)
-    
+
     # Optional - with sensible defaults
     aws_region: str = "eu-west-1"
     log_level: str = "INFO"

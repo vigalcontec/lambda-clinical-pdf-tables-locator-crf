@@ -60,17 +60,17 @@ def upload_json_to_s3(
         S3 URI of the uploaded object
     """
     logger.info("Uploading JSON to S3", extra={"bucket": bucket, "key": key})
-    
+
     json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
-    
+
     s3_client.put_object(
         Bucket=bucket,
         Key=key,
         Body=json_bytes,
         ContentType="application/json",
     )
-    
+
     s3_uri = f"s3://{bucket}/{key}"
     logger.info("JSON uploaded", extra={"s3_uri": s3_uri, "size_bytes": len(json_bytes)})
-    
+
     return s3_uri

@@ -182,7 +182,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
 
     except Exception as e:
         logger.exception("Error processing PDF")
-        
+
         # Try to update job status to FAILED if we have a job_id
         try:
             if "file_hash" in dir() and file_hash:
@@ -194,7 +194,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
                 )
         except Exception:
             logger.warning("Could not update job status to FAILED")
-        
+
         return {
             "status": "FAILED",
             "error": str(e),
