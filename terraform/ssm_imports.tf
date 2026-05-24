@@ -25,12 +25,12 @@ data "aws_ssm_parameter" "raw_kms_key_arn" {
 # DynamoDB - Clinical PDF Jobs Table
 # -----------------------------------------------------------------------------
 data "aws_ssm_parameter" "dynamodb_table_name" {
-  name            = "/${var.environment}/clinical-rag-foundry/dynamodb/clinical-pdf-jobs/table_name"
+  name            = "/${var.environment}/clinical-rag-foundry/dynamodb/clinical-pdf-jobs-crf/table_name"
   with_decryption = true
 }
 
 data "aws_ssm_parameter" "dynamodb_table_arn" {
-  name            = "/${var.environment}/clinical-rag-foundry/dynamodb/clinical-pdf-jobs/table_arn"
+  name            = "/${var.environment}/clinical-rag-foundry/dynamodb/clinical-pdf-jobs-crf/table_arn"
   with_decryption = true
 }
 
