@@ -75,8 +75,11 @@ resource "aws_lambda_function" "main" {
       POWERTOOLS_SERVICE_NAME      = local.function_name
       POWERTOOLS_METRICS_NAMESPACE = local.project_name
 
-      # Datalake RAW bucket (source PDFs)
-      RAW_BUCKET_NAME = local.datalake.raw.bucket_name
+      # Datalake RAW bucket (source PDFs and output events)
+      OUTPUT_S3_BUCKET = local.datalake.raw.bucket_name
+
+      # DynamoDB table for job tracking
+      DYNAMODB_TABLE_NAME = local.dynamodb.clinical_pdf_jobs.table_name
     }
   }
 

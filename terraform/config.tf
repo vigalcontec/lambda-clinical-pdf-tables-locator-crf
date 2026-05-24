@@ -6,9 +6,9 @@ locals {
   # ─────────────────────────────────────────────────────────────────────────────
   # Project Configuration (UPDATE THESE)
   # ─────────────────────────────────────────────────────────────────────────────
-  function_name = "clinical-pdf-tables-locator-crf"  # Lambda function name (without env suffix)
-  project_name  = "clinical-rag-foundry"          # Project name for tagging
-  company_name  = "vigalcontec"         # Company name for resource naming
+  function_name = "clinical-pdf-tables-locator-crf" # Lambda function name (without env suffix)
+  project_name  = "clinical-rag-foundry"            # Project name for tagging
+  company_name  = "vigalcontec"                     # Company name for resource naming
 
   # ─────────────────────────────────────────────────────────────────────────────
   # AWS Configuration
@@ -18,17 +18,17 @@ locals {
   # ─────────────────────────────────────────────────────────────────────────────
   # Lambda Configuration
   # ─────────────────────────────────────────────────────────────────────────────
-  timeout            = 120    # Lambda timeout in seconds
-  memory_size        = 256   # Lambda memory in MB
+  timeout            = 120 # Lambda timeout in seconds
+  memory_size        = 256 # Lambda memory in MB
   log_level          = "INFO"
   log_retention_days = 5
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Computed Values (DO NOT MODIFY)
   # ─────────────────────────────────────────────────────────────────────────────
-  account_id    = data.aws_caller_identity.current.account_id
-  full_name     = "${local.function_name}-${var.environment}"
-  state_bucket  = "tfstate-${local.company_name}-${var.environment}-${local.account_id}"
+  account_id   = data.aws_caller_identity.current.account_id
+  full_name    = "${local.function_name}-${var.environment}"
+  state_bucket = "tfstate-${local.company_name}-${var.environment}-${local.account_id}"
 
   # Common tags
   common_tags = {

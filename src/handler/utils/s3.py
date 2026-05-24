@@ -1,6 +1,8 @@
 """S3 utility functions."""
 
 import hashlib
+import json
+from typing import Any
 
 import boto3
 from aws_lambda_powertools import Logger, Tracer
@@ -39,3 +41,36 @@ def generate_file_hash(pdf_bytes: bytes) -> str:
         SHA256 hash string
     """
     return hashlib.sha256(pdf_bytes).hexdigest()
+
+
+@tracer.capture_method
+def upload_json_to_s3(
+    bucket: str,
+    key: str,
+    data: dict[str, Any] | list[Any],
+) -> str:
+    """Upload JSON data to S3.
+
+    Args:
+        bucket: S3 bucket name
+        key: S3 object key
+        data: Dictionary or list to serialize as JSON
+
+    Returns:
+        S3 URI of the uploaded object
+    """
+    logger.info("Uploading JSON to S3", extra={"bucket": bucket, "key": key})
+    
+    json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=json_bytes,
+        ContentType="application/json",
+    )
+    
+    s3_uri = f"s3://{bucket}/{key}"
+    logger.info("JSON uploaded", extra={"s3_uri": s3_uri, "size_bytes": len(json_bytes)})
+    
+    return s3_uri

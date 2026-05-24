@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-05-24
+
+### Added
+
+- **DynamoDB Job Tracking** - Creates job records in DynamoDB for monitoring and status tracking
+- **S3 Events Upload** - Uploads textract events JSON to S3 for Step Functions Distributed Map
+- **Job Status Updates** - Updates job status to FAILED on errors with error message
+- **DynamoDB Utility Module** - New `utils/dynamodb.py` with `create_job_record` and `update_job_status`
+
+### Changed
+
+- **Output Format** - Now includes `job_id`, `events_s3_uri`, and `dynamodb_table` in response
+- **Config** - `ENVIRONMENT`, `DYNAMODB_TABLE_NAME`, `OUTPUT_S3_BUCKET` now required from env vars (via SSM)
+- **IAM Permissions** - Added DynamoDB write and S3 PutObject permissions
+
+### New Environment Variables
+
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `ENVIRONMENT` | Terraform | Environment name (dev, qa, prod) |
+| `DYNAMODB_TABLE_NAME` | SSM | DynamoDB table for job tracking |
+| `OUTPUT_S3_BUCKET` | SSM | S3 bucket for events JSON output |
+
+### New Output Fields
+
+| Field | Description |
+|-------|-------------|
+| `job_id` | Unique job identifier (file_hash) |
+| `events_s3_uri` | S3 URI of uploaded events JSON |
+| `dynamodb_table` | DynamoDB table name used |
+| `textract_events_count` | Number of events generated |
+
+---
+
 ## [2.0.0] - 2026-05-20
 
 ### Added

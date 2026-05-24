@@ -1,9 +1,11 @@
 # =============================================================================
 # IAM Role and Policies for Lambda - Clinical PDF Tables Locator
 # =============================================================================
-# This Lambda only needs:
+# This Lambda needs:
 # - S3 GetObject on RAW bucket (to download PDFs)
+# - S3 PutObject on RAW bucket (to upload events JSON)
 # - KMS Decrypt on RAW bucket KMS key (to decrypt PDFs)
+# - DynamoDB PutItem/UpdateItem on clinical-pdf-jobs table (job tracking)
 # - CloudWatch Logs (basic execution)
 # - X-Ray tracing
 
@@ -48,10 +50,10 @@ resource "aws_iam_role_policy_attachment" "lambda_xray" {
 }
 
 # -----------------------------------------------------------------------------
-# S3 Read Access - RAW Bucket Only
+# S3 Read/Write Access - RAW Bucket
 # -----------------------------------------------------------------------------
-resource "aws_iam_role_policy" "s3_read" {
-  name = "${local.full_name}-s3-read"
+resource "aws_iam_role_policy" "s3_access" {
+  name = "${local.full_name}-s3-access"
   role = aws_iam_role.lambda.id
 
   policy = jsonencode({
@@ -65,6 +67,16 @@ resource "aws_iam_role_policy" "s3_read" {
         ]
         Resource = [
           "${local.datalake.raw.bucket_arn}/*"
+        ]
+      },
+      {
+        Sid    = "S3PutObject"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = [
+          "${local.datalake.raw.bucket_arn}/crf/clinical_pdfs/*"
         ]
       }
     ]
@@ -89,6 +101,32 @@ resource "aws_iam_role_policy" "kms_decrypt" {
         ]
         Resource = [
           local.datalake.raw.kms_key_arn
+        ]
+      }
+    ]
+  })
+}
+
+# -----------------------------------------------------------------------------
+# DynamoDB Write Access - Clinical PDF Jobs Table
+# -----------------------------------------------------------------------------
+resource "aws_iam_role_policy" "dynamodb_write" {
+  name = "${local.full_name}-dynamodb-write"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DynamoDBWriteAccess"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:GetItem"
+        ]
+        Resource = [
+          local.dynamodb.clinical_pdf_jobs.table_arn
         ]
       }
     ]

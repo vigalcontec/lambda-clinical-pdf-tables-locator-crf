@@ -21,6 +21,9 @@ def env_vars() -> Generator[None, None, None]:
             "ENVIRONMENT": "dev",
             "AWS_REGION": "eu-west-1",
             "LOG_LEVEL": "INFO",
+            "DYNAMODB_TABLE_NAME": "clinical-pdf-jobs-dev",
+            "OUTPUT_S3_BUCKET": "datalake-raw-dev",
+            "RAW_BUCKET_NAME": "datalake-raw-dev",
         },
     ):
         yield

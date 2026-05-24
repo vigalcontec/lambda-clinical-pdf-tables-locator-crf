@@ -9,6 +9,8 @@ from handler.config import Settings, get_settings
 class TestHandler:
     """Tests for main handler function."""
 
+    @patch("handler.main.upload_json_to_s3")
+    @patch("handler.main.create_job_record")
     @patch("handler.main.generate_textract_events")
     @patch("handler.main.analyze_pdf_pages")
     @patch("handler.main.get_total_pages")
@@ -21,6 +23,8 @@ class TestHandler:
         mock_total_pages: MagicMock,
         mock_analyze: MagicMock,
         mock_generate_events: MagicMock,
+        mock_create_job: MagicMock,
+        mock_upload_json: MagicMock,
         pdf_event: dict[str, Any],
         lambda_context: Any,
     ) -> None:
@@ -43,6 +47,7 @@ class TestHandler:
                 "table_index_on_page": 0,
             }
         ]
+        mock_upload_json.return_value = "s3://datalake-raw-dev/crf/clinical_pdfs/Keytruda/20260520173800/report_events.json"
 
         from handler.main import handler
 
@@ -50,10 +55,17 @@ class TestHandler:
 
         assert result["status"] == "SUCCESS"
         assert result["file_hash"] == "abc123hash"
+        assert result["job_id"] == "abc123hash"
         assert result["total_pages"] == 100
         assert result["product_name"] == "Keytruda"
-        assert len(result["textract_events"]) == 1
-        assert result["textract_events"][0]["s3_bucket"] == "datalake-raw-dev"
+        assert result["textract_events_count"] == 1
+        assert "events_s3_uri" in result
+        
+        # Verify DynamoDB was called
+        mock_create_job.assert_called_once()
+        
+        # Verify S3 upload was called
+        mock_upload_json.assert_called_once()
 
     def test_handler_extracts_product_name_from_path(
         self, lambda_context: Any
@@ -65,13 +77,16 @@ class TestHandler:
              patch("handler.main.generate_file_hash") as mock_hash, \
              patch("handler.main.get_total_pages") as mock_pages, \
              patch("handler.main.analyze_pdf_pages") as mock_analyze, \
-             patch("handler.main.generate_textract_events") as mock_events:
+             patch("handler.main.generate_textract_events") as mock_events, \
+             patch("handler.main.create_job_record"), \
+             patch("handler.main.upload_json_to_s3") as mock_upload:
             
             mock_download.return_value = b"pdf"
             mock_hash.return_value = "hash"
             mock_pages.return_value = 10
             mock_analyze.return_value = []
             mock_events.return_value = []
+            mock_upload.return_value = "s3://bucket/path/MyProduct/20260520/doc_events.json"
 
             from handler.main import handler
 
@@ -109,6 +124,8 @@ class TestHandler:
         assert result["status"] == "FAILED"
         assert "Missing 's3_bucket' or 's3_key'" in result["error"]
 
+    @patch("handler.main.upload_json_to_s3")
+    @patch("handler.main.create_job_record")
     @patch("handler.main.generate_textract_events")
     @patch("handler.main.analyze_pdf_pages")
     @patch("handler.main.get_total_pages")
@@ -121,6 +138,8 @@ class TestHandler:
         mock_total_pages: MagicMock,
         mock_analyze: MagicMock,
         mock_generate_events: MagicMock,
+        mock_create_job: MagicMock,
+        mock_upload_json: MagicMock,
         lambda_context: Any,
     ) -> None:
         """Test handler with S3 trigger event format."""
@@ -131,6 +150,7 @@ class TestHandler:
         mock_total_pages.return_value = 50
         mock_analyze.return_value = []
         mock_generate_events.return_value = []
+        mock_upload_json.return_value = "s3://datalake-raw-dev/crf/clinical_pdfs/Keytruda/20260520/doc_events.json"
 
         from handler.main import handler
 
@@ -157,6 +177,8 @@ class TestHandler:
             "crf/clinical_pdfs/Keytruda/20260520/doc.pdf"
         )
 
+    @patch("handler.main.upload_json_to_s3")
+    @patch("handler.main.create_job_record")
     @patch("handler.main.generate_textract_events")
     @patch("handler.main.analyze_pdf_pages")
     @patch("handler.main.get_total_pages")
@@ -169,6 +191,8 @@ class TestHandler:
         mock_total_pages: MagicMock,
         mock_analyze: MagicMock,
         mock_generate_events: MagicMock,
+        mock_create_job: MagicMock,
+        mock_upload_json: MagicMock,
         lambda_context: Any,
     ) -> None:
         """Test handler decodes URL-encoded S3 keys from trigger."""
@@ -179,6 +203,7 @@ class TestHandler:
         mock_total_pages.return_value = 10
         mock_analyze.return_value = []
         mock_generate_events.return_value = []
+        mock_upload_json.return_value = "s3://bucket/path/My Product/2026/file name_events.json"
 
         from handler.main import handler
 
@@ -473,3 +498,107 @@ class TestSSMUtils:
         result = get_parameters_by_path("/dev/empty/")
 
         assert result == {}
+
+
+class TestDynamoDBUtils:
+    """Tests for DynamoDB utility functions."""
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_create_job_record(self, mock_get_resource: MagicMock) -> None:
+        """Test creating a job record in DynamoDB."""
+        from handler.utils.dynamodb import create_job_record
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+
+        result = create_job_record(
+            table_name="clinical-pdf-jobs-dev",
+            job_id="abc123",
+            s3_bucket="bucket",
+            s3_key="path/to/file.pdf",
+            product_name="Keytruda",
+            file_hash="abc123",
+            total_pages=100,
+            total_tables=10,
+            textract_events_count=15,
+        )
+
+        assert result["PK"] == "JOB#abc123"
+        assert result["SK"] == "METADATA"
+        assert result["status"] == "PENDING"
+        assert result["product_name"] == "Keytruda"
+        assert result["GSI1PK"] == "PRODUCT#Keytruda"
+        mock_table.put_item.assert_called_once()
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_update_job_status(self, mock_get_resource: MagicMock) -> None:
+        """Test updating job status in DynamoDB."""
+        from handler.utils.dynamodb import update_job_status
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+
+        update_job_status(
+            table_name="clinical-pdf-jobs-dev",
+            job_id="abc123",
+            status="SUCCESS",
+        )
+
+        mock_table.update_item.assert_called_once()
+        call_args = mock_table.update_item.call_args
+        assert call_args.kwargs["Key"] == {"PK": "JOB#abc123", "SK": "METADATA"}
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_update_job_status_failed_with_error(self, mock_get_resource: MagicMock) -> None:
+        """Test updating job status to FAILED with error message."""
+        from handler.utils.dynamodb import update_job_status
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+
+        update_job_status(
+            table_name="clinical-pdf-jobs-dev",
+            job_id="abc123",
+            status="FAILED",
+            error_message="Something went wrong",
+        )
+
+        mock_table.update_item.assert_called_once()
+        call_args = mock_table.update_item.call_args
+        assert ":error" in call_args.kwargs["ExpressionAttributeValues"]
+
+
+class TestS3UploadUtils:
+    """Tests for S3 upload utility functions."""
+
+    @patch("handler.utils.s3.s3_client")
+    def test_upload_json_to_s3(self, mock_s3: MagicMock) -> None:
+        """Test uploading JSON to S3."""
+        from handler.utils.s3 import upload_json_to_s3
+
+        data = {"key": "value", "list": [1, 2, 3]}
+        result = upload_json_to_s3("my-bucket", "path/to/file.json", data)
+
+        assert result == "s3://my-bucket/path/to/file.json"
+        mock_s3.put_object.assert_called_once()
+        call_args = mock_s3.put_object.call_args
+        assert call_args.kwargs["Bucket"] == "my-bucket"
+        assert call_args.kwargs["Key"] == "path/to/file.json"
+        assert call_args.kwargs["ContentType"] == "application/json"
+
+    @patch("handler.utils.s3.s3_client")
+    def test_upload_json_to_s3_list(self, mock_s3: MagicMock) -> None:
+        """Test uploading a list as JSON to S3."""
+        from handler.utils.s3 import upload_json_to_s3
+
+        data = [{"event": 1}, {"event": 2}]
+        result = upload_json_to_s3("bucket", "events.json", data)
+
+        assert result == "s3://bucket/events.json"
+        mock_s3.put_object.assert_called_once()

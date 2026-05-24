@@ -13,10 +13,13 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from handler.config import get_settings
 from handler.utils import (
     analyze_pdf_pages,
+    create_job_record,
     download_pdf_from_s3,
     generate_file_hash,
     generate_textract_events,
     get_total_pages,
+    update_job_status,
+    upload_json_to_s3,
 )
 
 logger = Logger()
@@ -128,19 +131,70 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
             },
         )
 
+        # Use file_hash as job_id for idempotency
+        job_id = file_hash
+
+        # Write job metadata to DynamoDB
+        create_job_record(
+            table_name=settings.dynamodb_table_name,
+            job_id=job_id,
+            s3_bucket=bucket,
+            s3_key=key,
+            product_name=product_name,
+            file_hash=file_hash,
+            total_pages=total_pages,
+            total_tables=unique_tables,
+            textract_events_count=len(textract_events),
+        )
+
+        # Upload textract events to S3 for Step Functions Distributed Map
+        # Path: same as PDF but with _events.json suffix
+        events_key = key.rsplit(".", 1)[0] + "_events.json"
+        output_bucket = settings.output_s3_bucket or bucket
+        events_s3_uri = upload_json_to_s3(
+            bucket=output_bucket,
+            key=events_key,
+            data=textract_events,
+        )
+
+        logger.info(
+            "Job created",
+            extra={
+                "job_id": job_id,
+                "events_s3_uri": events_s3_uri,
+                "dynamodb_table": settings.dynamodb_table_name,
+            },
+        )
+
         return {
             "status": "SUCCESS",
+            "job_id": job_id,
             "s3_bucket": bucket,
             "s3_key": key,
             "product_name": product_name,
             "file_hash": file_hash,
             "total_pages": total_pages,
             "total_tables": unique_tables,
-            "textract_events": textract_events,
+            "textract_events_count": len(textract_events),
+            "events_s3_uri": events_s3_uri,
+            "dynamodb_table": settings.dynamodb_table_name,
         }
 
     except Exception as e:
         logger.exception("Error processing PDF")
+        
+        # Try to update job status to FAILED if we have a job_id
+        try:
+            if "file_hash" in dir() and file_hash:
+                update_job_status(
+                    table_name=settings.dynamodb_table_name,
+                    job_id=file_hash,
+                    status="FAILED",
+                    error_message=str(e),
+                )
+        except Exception:
+            logger.warning("Could not update job status to FAILED")
+        
         return {
             "status": "FAILED",
             "error": str(e),

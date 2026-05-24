@@ -50,36 +50,20 @@ This Lambda is the first step in a clinical document processing pipeline:
 ```json
 {
     "status": "SUCCESS",
+    "job_id": "abc123hash",
     "s3_bucket": "datalake-raw-dev",
     "s3_key": "crf/clinical_pdfs/Keytruda/20260520173800/document.pdf",
     "product_name": "Keytruda",
-    "file_hash": "sha256-hash",
+    "file_hash": "abc123hash",
     "total_pages": 301,
     "total_tables": 56,
-    "textract_events": [
-        {
-            "s3_bucket": "datalake-raw-dev",
-            "s3_key": "crf/clinical_pdfs/Keytruda/20260520173800/document.pdf",
-            "product_name": "Keytruda",
-            "table_name": "Table 1: Recommended treatment modifications",
-            "table_number": 1,
-            "page": 7,
-            "table_index_on_page": 0
-        },
-        {
-            "s3_bucket": "datalake-raw-dev",
-            "s3_key": "crf/clinical_pdfs/Keytruda/20260520173800/document.pdf",
-            "product_name": "Keytruda",
-            "table_name": "Table 1: Recommended treatment modifications",
-            "table_number": 1,
-            "page": 8,
-            "table_index_on_page": 0
-        }
-    ]
+    "textract_events_count": 72,
+    "events_s3_uri": "s3://datalake-raw-dev/crf/clinical_pdfs/Keytruda/20260520173800/document_events.json",
+    "dynamodb_table": "clinical-pdf-jobs-dev"
 }
 ```
 
-Each `textract_event` is self-contained for Step Functions Distributed Map.
+**Note:** The `textract_events` array is uploaded to S3 at `events_s3_uri` for Step Functions Distributed Map consumption. A job record is created in DynamoDB for monitoring.
 
 ---
 
@@ -88,11 +72,12 @@ Each `textract_event` is self-contained for Step Functions Distributed Map.
 - ✅ **PDF Table Detection** - Uses PyMuPDF to identify pages with tables
 - ✅ **Multi-page Table Support** - Continuation pages inherit table info
 - ✅ **Multiple Tables per Page** - Tracks `table_index_on_page`
-- ✅ **Distributed Map Ready** - Self-contained events for parallel processing
+- ✅ **Distributed Map Ready** - Events uploaded to S3 for parallel processing
+- ✅ **DynamoDB Job Tracking** - Creates job records for monitoring and status
 - ✅ **Product Name Extraction** - Parsed from S3 key path
 - ✅ **File Hash** - SHA256 for idempotency checks
 - ✅ **Structured Logging** - AWS Lambda Powertools
-- ✅ **Modular Architecture** - Utils split into s3, pdf, textract_events
+- ✅ **Modular Architecture** - Utils split into s3, pdf, textract_events, dynamodb
 
 ---
 
@@ -106,9 +91,10 @@ lambda-clinical-pdf-tables-locator-crf/
 │       ├── config.py               # Settings
 │       └── utils/
 │           ├── __init__.py         # Exports
-│           ├── s3.py               # S3 download, hash generation
+│           ├── s3.py               # S3 download, upload, hash generation
 │           ├── pdf.py              # PDF analysis with PyMuPDF
 │           ├── textract_events.py  # Event generation for Distributed Map
+│           ├── dynamodb.py         # DynamoDB job tracking
 │           └── ssm.py              # SSM utilities
 ├── tests/
 │   ├── conftest.py                 # Pytest fixtures
@@ -116,12 +102,28 @@ lambda-clinical-pdf-tables-locator-crf/
 ├── terraform/
 │   ├── config.tf                   # Project configuration
 │   ├── main.tf                     # Lambda + ECR
-│   └── iam.tf                      # IAM policies
+│   ├── iam.tf                      # IAM policies (S3, DynamoDB, KMS)
+│   ├── ssm_imports.tf              # SSM parameter imports (datalake, DynamoDB)
+│   └── ssm_exports.tf              # SSM parameter exports
 ├── Dockerfile
 ├── pyproject.toml
 ├── CHANGELOG.md
 └── README.md
 ```
+
+---
+
+## Environment Variables
+
+The Lambda requires the following environment variables, set by Terraform from SSM parameters:
+
+| Variable | Required | Source | Description |
+|----------|----------|--------|-------------|
+| `ENVIRONMENT` | ✅ | Terraform | Environment name (dev, qa, prod) |
+| `DYNAMODB_TABLE_NAME` | ✅ | SSM | DynamoDB table for job tracking |
+| `OUTPUT_S3_BUCKET` | ✅ | SSM | S3 bucket for events JSON output |
+| `LOG_LEVEL` | ❌ | Terraform | Log level (default: INFO) |
+| `AWS_REGION` | ❌ | Lambda | AWS region (default: eu-west-1) |
 
 ---
 

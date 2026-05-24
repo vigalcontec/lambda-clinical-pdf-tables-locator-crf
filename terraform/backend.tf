@@ -11,7 +11,7 @@ terraform {
     # - key     = "lambda/{function_name}/terraform.tfstate"
     # - region  = "eu-west-1"
     # - encrypt = true
-    
+
     # For local development, create backend_override.tf with:
     # terraform {
     #   backend "s3" {
