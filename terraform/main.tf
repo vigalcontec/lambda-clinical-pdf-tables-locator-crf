@@ -87,6 +87,11 @@ resource "aws_lambda_function" "main" {
     mode = "Active"
   }
 
+  # Ephemeral storage for large PDF processing (default 512MB)
+  ephemeral_storage {
+    size = 1024  # 1GB - needed for PyMuPDF temp files
+  }
+
   tags = {
     Name = local.full_name
   }
