@@ -28,7 +28,7 @@ tracer = Tracer()
 
 @logger.inject_lambda_context(log_event=True)
 @tracer.capture_lambda_handler
-def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
+def handler(event: dict[str, Any], _context: LambdaContext) -> None:
     """Lambda handler for PDF table locator.
 
     Expected event payload:
@@ -39,31 +39,12 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
 
     The product_name is extracted from the s3_key path (second-to-last directory).
 
-    Returns:
-        {
-            "status": "SUCCESS",
-            "s3_bucket": "bucket-name",
-            "s3_key": "path/to/document.pdf",
-            "product_name": "Keytruda",
-            "file_hash": "sha256-hash",
-            "total_pages": 100,
-            "total_tables": 25,
-            "textract_events": [
-                {
-                    "s3_bucket": "bucket-name",
-                    "s3_key": "path/to/document.pdf",
-                    "product_name": "Keytruda",
-                    "table_name": "Table 1: ...",
-                    "table_number": 1,
-                    "page": 7,
-                    "table_index_on_page": 0
-                },
-                ...
-            ]
-        }
+    Output:
+        - S3: Uploads textract events JSON to {s3_key}_events.json
+        - DynamoDB: Creates job record with metadata
 
-    Step Functions Distributed Map uses $.textract_events as ItemsPath,
-    and each event is self-contained for the Textract lambda.
+    No return value - results stored in S3/DynamoDB to avoid 6MB Lambda response limit.
+    On error, raises exception and updates DynamoDB job status to FAILED.
     """
     settings = get_settings()
     logger.info("Starting PDF table locator", extra={"environment": settings.environment})
