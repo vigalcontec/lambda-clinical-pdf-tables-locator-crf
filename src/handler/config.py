@@ -27,5 +27,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Get cached settings instance."""
-    return Settings()
+    """Get cached settings instance.
+
+    Required fields are read from environment variables at runtime.
+    """
+    return Settings()  # type: ignore[call-arg]
