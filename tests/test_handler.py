@@ -28,7 +28,7 @@ class TestHandler:
         pdf_event: dict[str, Any],
         lambda_context: Any,
     ) -> None:
-        """Test successful handler execution."""
+        """Test successful handler execution - no return value."""
         get_settings.cache_clear()
 
         # Setup mocks
@@ -51,19 +51,16 @@ class TestHandler:
 
         from handler.main import handler
 
+        # Handler completes without raising - no return value
         result = handler(pdf_event, lambda_context)
+        assert result is None
 
-        assert result["status"] == "SUCCESS"
-        assert result["file_hash"] == "abc123hash"
-        assert result["job_id"] == "abc123hash"
-        assert result["total_pages"] == 100
-        assert result["product_name"] == "Keytruda"
-        assert result["textract_events_count"] == 1
-        assert "events_s3_uri" in result
-        
-        # Verify DynamoDB was called
+        # Verify DynamoDB was called with correct job_id
         mock_create_job.assert_called_once()
-        
+        call_kwargs = mock_create_job.call_args.kwargs
+        assert call_kwargs["job_id"] == "abc123hash"
+        assert call_kwargs["product_name"] == "Keytruda"
+
         # Verify S3 upload was called
         mock_upload_json.assert_called_once()
 
@@ -78,9 +75,9 @@ class TestHandler:
              patch("handler.main.get_total_pages") as mock_pages, \
              patch("handler.main.analyze_pdf_pages") as mock_analyze, \
              patch("handler.main.generate_textract_events") as mock_events, \
-             patch("handler.main.create_job_record"), \
+             patch("handler.main.create_job_record") as mock_create_job, \
              patch("handler.main.upload_json_to_s3") as mock_upload:
-            
+
             mock_download.return_value = b"pdf"
             mock_hash.return_value = "hash"
             mock_pages.return_value = 10
@@ -94,35 +91,37 @@ class TestHandler:
                 "s3_bucket": "bucket",
                 "s3_key": "path/MyProduct/20260520/doc.pdf",
             }
-            result = handler(event, lambda_context)
+            handler(event, lambda_context)
 
-            assert result["product_name"] == "MyProduct"
+            # Verify product_name was passed to DynamoDB
+            call_kwargs = mock_create_job.call_args.kwargs
+            assert call_kwargs["product_name"] == "MyProduct"
 
-    def test_handler_returns_failed_on_missing_bucket(
+    def test_handler_raises_on_missing_bucket(
         self, lambda_context: Any
     ) -> None:
-        """Test handler returns FAILED when s3_bucket is missing."""
+        """Test handler raises exception when s3_bucket is missing."""
+        import pytest
+
         get_settings.cache_clear()
 
         from handler.main import handler
 
-        result = handler({"s3_key": "test.pdf"}, lambda_context)
-        
-        assert result["status"] == "FAILED"
-        assert "Missing 's3_bucket' or 's3_key'" in result["error"]
+        with pytest.raises(ValueError, match="Missing 's3_bucket' or 's3_key'"):
+            handler({"s3_key": "test.pdf"}, lambda_context)
 
-    def test_handler_returns_failed_on_missing_key(
+    def test_handler_raises_on_missing_key(
         self, lambda_context: Any
     ) -> None:
-        """Test handler returns FAILED when s3_key is missing."""
+        """Test handler raises exception when s3_key is missing."""
+        import pytest
+
         get_settings.cache_clear()
 
         from handler.main import handler
 
-        result = handler({"s3_bucket": "my-bucket"}, lambda_context)
-        
-        assert result["status"] == "FAILED"
-        assert "Missing 's3_bucket' or 's3_key'" in result["error"]
+        with pytest.raises(ValueError, match="Missing 's3_bucket' or 's3_key'"):
+            handler({"s3_bucket": "my-bucket"}, lambda_context)
 
     @patch("handler.main.upload_json_to_s3")
     @patch("handler.main.create_job_record")
@@ -166,12 +165,10 @@ class TestHandler:
             ]
         }
 
+        # Handler completes without raising
         result = handler(s3_event, lambda_context)
+        assert result is None
 
-        assert result["status"] == "SUCCESS"
-        assert result["s3_bucket"] == "datalake-raw-dev"
-        assert result["s3_key"] == "crf/clinical_pdfs/Keytruda/20260520/doc.pdf"
-        assert result["product_name"] == "Keytruda"
         mock_download.assert_called_once_with(
             "datalake-raw-dev",
             "crf/clinical_pdfs/Keytruda/20260520/doc.pdf"
@@ -219,11 +216,11 @@ class TestHandler:
             ]
         }
 
+        # Handler completes without raising
         result = handler(s3_event, lambda_context)
+        assert result is None
 
-        assert result["status"] == "SUCCESS"
         # Key should be decoded
-        assert result["s3_key"] == "path/My Product/2026/file name.pdf"
         mock_download.assert_called_once_with(
             "bucket",
             "path/My Product/2026/file name.pdf"

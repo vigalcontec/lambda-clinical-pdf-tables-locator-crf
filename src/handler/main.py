@@ -158,27 +158,17 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
         )
 
         logger.info(
-            "Job created",
+            "Job completed successfully",
             extra={
                 "job_id": job_id,
                 "events_s3_uri": events_s3_uri,
                 "dynamodb_table": settings.dynamodb_table_name,
+                "textract_events_count": len(textract_events),
             },
         )
 
-        return {
-            "status": "SUCCESS",
-            "job_id": job_id,
-            "s3_bucket": bucket,
-            "s3_key": key,
-            "product_name": product_name,
-            "file_hash": file_hash,
-            "total_pages": total_pages,
-            "total_tables": unique_tables,
-            "textract_events_count": len(textract_events),
-            "events_s3_uri": events_s3_uri,
-            "dynamodb_table": settings.dynamodb_table_name,
-        }
+        # No return - events are stored in S3, metadata in DynamoDB
+        # This avoids Lambda response size limits (6MB)
 
     except Exception as e:
         logger.exception("Error processing PDF")
@@ -195,12 +185,8 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
         except Exception:
             logger.warning("Could not update job status to FAILED")
 
-        return {
-            "status": "FAILED",
-            "error": str(e),
-            "s3_bucket": event.get("s3_bucket"),
-            "s3_key": event.get("s3_key"),
-        }
+        # Re-raise to mark Lambda invocation as failed
+        raise
 
 
 # if __name__ == "__main__":

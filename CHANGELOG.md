@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Output Format** - Now includes `job_id`, `events_s3_uri`, and `dynamodb_table` in response
+- **No Return Value** - Handler no longer returns data (avoids 6MB Lambda response limit)
+- **Error Handling** - Raises exceptions on failure instead of returning error dict
 - **Config** - `ENVIRONMENT`, `DYNAMODB_TABLE_NAME`, `OUTPUT_S3_BUCKET` now required from env vars (via SSM)
 - **IAM Permissions** - Added DynamoDB write and S3 PutObject permissions
 
@@ -28,14 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | `DYNAMODB_TABLE_NAME` | SSM | DynamoDB table for job tracking |
 | `OUTPUT_S3_BUCKET` | SSM | S3 bucket for events JSON output |
 
-### New Output Fields
+### Output Storage
 
-| Field | Description |
-|-------|-------------|
-| `job_id` | Unique job identifier (file_hash) |
-| `events_s3_uri` | S3 URI of uploaded events JSON |
-| `dynamodb_table` | DynamoDB table name used |
-| `textract_events_count` | Number of events generated |
+| Storage | Content |
+|---------|---------|
+| S3 | `{s3_key}_events.json` - Textract events for Distributed Map |
+| DynamoDB | Job metadata (job_id, status, product_name, etc.) |
 
 ---
 

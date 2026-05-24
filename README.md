@@ -47,23 +47,14 @@ This Lambda is the first step in a clinical document processing pipeline:
 
 ### Output
 
-```json
-{
-    "status": "SUCCESS",
-    "job_id": "abc123hash",
-    "s3_bucket": "datalake-raw-dev",
-    "s3_key": "crf/clinical_pdfs/Keytruda/20260520173800/document.pdf",
-    "product_name": "Keytruda",
-    "file_hash": "abc123hash",
-    "total_pages": 301,
-    "total_tables": 56,
-    "textract_events_count": 72,
-    "events_s3_uri": "s3://datalake-raw-dev/crf/clinical_pdfs/Keytruda/20260520173800/document_events.json",
-    "dynamodb_table": "clinical-pdf-jobs-dev"
-}
-```
+**No return value** - The Lambda writes results to S3 and DynamoDB instead of returning data (avoids 6MB Lambda response limit).
 
-**Note:** The `textract_events` array is uploaded to S3 at `events_s3_uri` for Step Functions Distributed Map consumption. A job record is created in DynamoDB for monitoring.
+| Storage | Content |
+|---------|---------|
+| **S3** | `{s3_key}_events.json` - Textract events array for Step Functions Distributed Map |
+| **DynamoDB** | Job metadata (job_id, status, product_name, total_pages, etc.) |
+
+On error, the Lambda raises an exception (marks invocation as failed) and updates DynamoDB job status to `FAILED`.
 
 ---
 
