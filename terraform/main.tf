@@ -68,8 +68,6 @@ resource "aws_lambda_function" "main" {
   timeout     = local.timeout
   memory_size = local.memory_size
 
-  memory = 1024
-
   environment {
     variables = {
       ENVIRONMENT                  = var.environment
