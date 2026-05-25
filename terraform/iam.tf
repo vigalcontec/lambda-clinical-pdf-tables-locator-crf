@@ -84,20 +84,21 @@ resource "aws_iam_role_policy" "s3_access" {
 }
 
 # -----------------------------------------------------------------------------
-# KMS Decrypt - RAW Bucket KMS Key Only
+# KMS Access - RAW Bucket KMS Key (Decrypt for read, GenerateDataKey for write)
 # -----------------------------------------------------------------------------
-resource "aws_iam_role_policy" "kms_decrypt" {
-  name = "${local.full_name}-kms-decrypt"
+resource "aws_iam_role_policy" "kms_access" {
+  name = "${local.full_name}-kms-access"
   role = aws_iam_role.lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "KMSDecrypt"
+        Sid    = "KMSReadWrite"
         Effect = "Allow"
         Action = [
-          "kms:Decrypt"
+          "kms:Decrypt",        # Required for s3:GetObject on encrypted bucket
+          "kms:GenerateDataKey" # Required for s3:PutObject on encrypted bucket
         ]
         Resource = [
           local.datalake.raw.kms_key_arn
