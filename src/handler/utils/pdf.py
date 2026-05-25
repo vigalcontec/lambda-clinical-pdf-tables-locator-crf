@@ -1,7 +1,13 @@
 """PDF analysis utility functions using PyMuPDF."""
 
+import os
 import re
 from typing import Any
+
+# Ensure PyMuPDF uses /tmp for temp files (Lambda has limited path length)
+os.environ.setdefault("TMPDIR", "/tmp")
+os.environ.setdefault("TEMP", "/tmp")
+os.environ.setdefault("TMP", "/tmp")
 
 import fitz
 from aws_lambda_powertools import Logger, Tracer

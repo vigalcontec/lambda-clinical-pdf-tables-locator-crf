@@ -19,7 +19,7 @@ locals {
   # Lambda Configuration
   # ─────────────────────────────────────────────────────────────────────────────
   timeout            = 120 # Lambda timeout in seconds
-  memory_size        = 256 # Lambda memory in MB
+  memory_size        = 1024 # Lambda memory in MB
   log_level          = "INFO"
   log_retention_days = 5
 
