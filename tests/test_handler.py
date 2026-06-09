@@ -309,13 +309,14 @@ class TestTextractEvents:
         from handler.utils.textract_events import generate_textract_events
 
         events = generate_textract_events(
-            sample_page_info, "test-bucket", "path/Keytruda/20260520/doc.pdf", "Keytruda"
+            sample_page_info, "test-bucket", "path/Keytruda/20260520/doc.pdf", "Keytruda", "job123"
         )
 
         # Should have events for pages 7, 8, 32 (page 9 has no table)
         assert len(events) == 4
         
         # Check first event (Table 1, page 7)
+        assert events[0]["job_id"] == "job123"
         assert events[0]["s3_bucket"] == "test-bucket"
         assert events[0]["product_name"] == "Keytruda"
         assert events[0]["table_number"] == 1
@@ -328,11 +329,12 @@ class TestTextractEvents:
         from handler.utils.textract_events import generate_textract_events
 
         events = generate_textract_events(
-            sample_page_info, "bucket", "key", "Product"
+            sample_page_info, "bucket", "key", "Product", "job456"
         )
 
         # Page 8 is continuation of Table 1
         page_8_event = next(e for e in events if e["page"] == 8)
+        assert page_8_event["job_id"] == "job456"
         assert page_8_event["table_number"] == 1
         assert page_8_event["table_name"] == "Table 1: Recommended dose"
 
@@ -343,7 +345,7 @@ class TestTextractEvents:
         from handler.utils.textract_events import generate_textract_events
 
         events = generate_textract_events(
-            sample_page_info, "bucket", "key", "Product"
+            sample_page_info, "bucket", "key", "Product", "job789"
         )
 
         # Page 32 has Table 6 and Table 7
@@ -361,7 +363,7 @@ class TestTextractEvents:
         from handler.utils.textract_events import generate_textract_events
 
         events = generate_textract_events(
-            sample_page_info, "bucket", "key", "Product"
+            sample_page_info, "bucket", "key", "Product", "job_sorted"
         )
 
         # Should be sorted: Table 1 (p7, p8), Table 6 (p32), Table 7 (p32)
@@ -569,6 +571,157 @@ class TestDynamoDBUtils:
         mock_table.update_item.assert_called_once()
         call_args = mock_table.update_item.call_args
         assert ":error" in call_args.kwargs["ExpressionAttributeValues"]
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_get_job_status_found(self, mock_get_resource: MagicMock) -> None:
+        """Test getting job status when job exists."""
+        from handler.utils.dynamodb import get_job_status
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+        mock_table.get_item.return_value = {
+            "Item": {"PK": "JOB#abc123", "SK": "METADATA", "status": "SUCCESS"}
+        }
+
+        result = get_job_status("clinical-pdf-jobs-dev", "abc123")
+
+        assert result is not None
+        assert result["status"] == "SUCCESS"
+        mock_table.get_item.assert_called_once_with(
+            Key={"PK": "JOB#abc123", "SK": "METADATA"}
+        )
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_get_job_status_not_found(self, mock_get_resource: MagicMock) -> None:
+        """Test getting job status when job does not exist."""
+        from handler.utils.dynamodb import get_job_status
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+        mock_table.get_item.return_value = {}
+
+        result = get_job_status("clinical-pdf-jobs-dev", "nonexistent")
+
+        assert result is None
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_get_processed_tables(self, mock_get_resource: MagicMock) -> None:
+        """Test getting processed tables for a job."""
+        from handler.utils.dynamodb import get_processed_tables
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+        mock_table.query.return_value = {
+            "Items": [
+                {"SK": "TABLE#1#PAGE#5", "status": "SUCCESS"},
+                {"SK": "TABLE#2#PAGE#10", "status": "FAILED"},
+                {"SK": "TABLE#3#PAGE#15", "status": "SUCCESS"},
+            ]
+        }
+
+        result = get_processed_tables("clinical-pdf-jobs-dev", "abc123")
+
+        assert result == {"1_5": "SUCCESS", "2_10": "FAILED", "3_15": "SUCCESS"}
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_filter_pending_events_all_new(self, mock_get_resource: MagicMock) -> None:
+        """Test filtering events when no tables have been processed."""
+        from handler.utils.dynamodb import filter_pending_events
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+        mock_table.query.return_value = {"Items": []}
+
+        events = [
+            {"table_number": 1, "page": 5},
+            {"table_number": 2, "page": 10},
+        ]
+
+        result = filter_pending_events("table", "job123", events)
+
+        assert len(result) == 2
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_filter_pending_events_skip_success(self, mock_get_resource: MagicMock) -> None:
+        """Test filtering events skips successfully processed tables."""
+        from handler.utils.dynamodb import filter_pending_events
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+        mock_table.query.return_value = {
+            "Items": [
+                {"SK": "TABLE#1#PAGE#5", "status": "SUCCESS"},
+            ]
+        }
+
+        events = [
+            {"table_number": 1, "page": 5},
+            {"table_number": 2, "page": 10},
+        ]
+
+        result = filter_pending_events("table", "job123", events)
+
+        assert len(result) == 1
+        assert result[0]["table_number"] == 2
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_filter_pending_events_reprocess_failed(self, mock_get_resource: MagicMock) -> None:
+        """Test filtering events includes failed tables for reprocessing."""
+        from handler.utils.dynamodb import filter_pending_events
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+        mock_table.query.return_value = {
+            "Items": [
+                {"SK": "TABLE#1#PAGE#5", "status": "FAILED"},
+            ]
+        }
+
+        events = [
+            {"table_number": 1, "page": 5},
+            {"table_number": 2, "page": 10},
+        ]
+
+        result = filter_pending_events("table", "job123", events, reprocess_failed=True)
+
+        assert len(result) == 2  # Both events included
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_filter_pending_events_skip_failed(self, mock_get_resource: MagicMock) -> None:
+        """Test filtering events skips failed tables when reprocess_failed=False."""
+        from handler.utils.dynamodb import filter_pending_events
+
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_get_resource.return_value = mock_resource
+        mock_table.query.return_value = {
+            "Items": [
+                {"SK": "TABLE#1#PAGE#5", "status": "FAILED"},
+            ]
+        }
+
+        events = [
+            {"table_number": 1, "page": 5},
+            {"table_number": 2, "page": 10},
+        ]
+
+        result = filter_pending_events("table", "job123", events, reprocess_failed=False)
+
+        assert len(result) == 1
+        assert result[0]["table_number"] == 2
 
 
 class TestS3UploadUtils:

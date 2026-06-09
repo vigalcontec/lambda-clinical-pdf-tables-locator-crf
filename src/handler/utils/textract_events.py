@@ -12,6 +12,7 @@ def generate_textract_events(
     s3_bucket: str,
     s3_key: str,
     product_name: str,
+    job_id: str,
 ) -> list[dict[str, Any]]:
     """Generate Textract events for each page containing a table.
 
@@ -27,11 +28,13 @@ def generate_textract_events(
         s3_bucket: S3 bucket containing the PDF
         s3_key: S3 key of the PDF
         product_name: Product name to include in events
+        job_id: Unique job identifier (file hash) for tracking
 
     Returns:
         List of events ready for Textract lambda (one per page):
         [
             {
+                "job_id": "abc123...",
                 "s3_bucket": "bucket-name",
                 "s3_key": "path/to/document.pdf",
                 "product_name": "Keytruda",
@@ -71,6 +74,7 @@ def generate_textract_events(
                 table_index = idx if idx < tables_count else 0
 
                 textract_events.append({
+                    "job_id": job_id,
                     "s3_bucket": s3_bucket,
                     "s3_key": s3_key,
                     "product_name": product_name,
@@ -88,6 +92,7 @@ def generate_textract_events(
             # This page has table structure but NO identifier
             # It's a continuation of the previous table
             textract_events.append({
+                "job_id": job_id,
                 "s3_bucket": s3_bucket,
                 "s3_key": s3_key,
                 "product_name": product_name,
