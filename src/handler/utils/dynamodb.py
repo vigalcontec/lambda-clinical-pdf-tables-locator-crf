@@ -34,7 +34,7 @@ def get_job_status(table_name: str, job_id: str) -> dict[str, Any] | None:
         Key={"PK": f"JOB#{job_id}", "SK": "METADATA"}
     )
 
-    item = response.get("Item")
+    item: dict[str, Any] | None = response.get("Item")
     if item:
         logger.info("Job found", extra={"job_id": job_id, "status": item.get("status")})
     else:

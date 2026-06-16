@@ -131,7 +131,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> None:
                 extra={"job_id": job_id, "total_events": len(all_textract_events)},
             )
 
-        if is_reprocessing:
+        if is_reprocessing and existing_job is not None:
             # Filter to only include tables that need processing
             # (not yet processed or previously failed)
             textract_events = filter_pending_events(
