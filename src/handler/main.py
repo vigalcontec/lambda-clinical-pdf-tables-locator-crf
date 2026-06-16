@@ -94,9 +94,19 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> None:
         # Generate hash for idempotency
         file_hash = generate_file_hash(pdf_bytes)
 
-        # Analyze PDF pages
+        # Analyze PDF pages (returns page_info and product_sections for multi-product PDFs)
         total_pages = get_total_pages(pdf_bytes)
-        page_info = analyze_pdf_pages(pdf_bytes)
+        page_info, product_sections = analyze_pdf_pages(pdf_bytes)
+
+        # Log if this is a multi-product PDF
+        if len(product_sections) > 1:
+            logger.info(
+                "Multi-product PDF detected",
+                extra={
+                    "product_sections": len(product_sections),
+                    "formulations": [s["formulation_key"] for s in product_sections],
+                }
+            )
 
         # Use file_hash as job_id for idempotency
         job_id = file_hash
@@ -236,10 +246,10 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> None:
 
 
 # if __name__ == "__main__":
-#     import json
+#     # Disable Powertools trace module in local test mode
 #     import os
-
 #     os.environ.setdefault("POWERTOOLS_TRACE_DISABLED", "true")
+#     # Set environment and DynamoDB table name for local testing
 #     os.environ.setdefault("ENVIRONMENT", "dev")
 #     os.environ.setdefault("DYNAMODB_TABLE_NAME", "dynamodb-clinical-pdf-jobs-crf-dev")
 #     os.environ.setdefault("OUTPUT_S3_BUCKET", "datalake-raw-vigalcontec-dev-002332700133")
@@ -252,84 +262,6 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> None:
 #     LOCAL_TEST_MODE = True
 
 #     if LOCAL_TEST_MODE:
-#         # Direct PDF analysis test (no DynamoDB/S3)
-#         from handler.utils import (
-#             download_pdf_from_s3,
-#             generate_file_hash,
-#             get_total_pages,
-#             analyze_pdf_pages,
-#             generate_textract_events,
-#         )
-
-#         bucket = "datalake-raw-vigalcontec-dev-002332700133"
-#         key = "crf/clinical_pdfs/tecentriq/20260603164300/tecentriq-epar-product-information_en.pdf"
-#         product_name = "tecentriq"
-
-#         print(f"\n{'='*60}")
-#         print(f"LOCAL TEST: Analyzing PDF")
-#         print(f"{'='*60}\n")
-
-#         # Download and analyze
-#         pdf_bytes = download_pdf_from_s3(bucket, key)
-#         file_hash = generate_file_hash(pdf_bytes)
-#         total_pages = get_total_pages(pdf_bytes)
-#         page_info = analyze_pdf_pages(pdf_bytes)
-
-#         # Generate events
-#         textract_events = generate_textract_events(page_info, bucket, key, product_name, file_hash)
-
-#         # Summary
-#         pages_with_tables = [p for p in page_info if p["has_table_structure"]]
-#         structural = [p for p in page_info if p.get("detection_method") == "structural"]
-#         fallback = [p for p in page_info if p.get("detection_method") == "text_pattern"]
-
-#         print(f"PDF Analysis Results:")
-#         print(f"  - Total pages: {total_pages}")
-#         print(f"  - Pages with tables: {len(pages_with_tables)}")
-#         print(f"    - Structural detection: {len(structural)}")
-#         print(f"    - Text pattern fallback: {len(fallback)}")
-#         print(f"  - Textract events generated: {len(textract_events)}")
-#         print(f"  - Unique tables: {len({e['table_number'] for e in textract_events})}")
-#         print(f"  - File hash (job_id): {file_hash[:16]}...")
-
-#         print(f"\n{'='*60}")
-#         print(f"Sample Events (first 70):")
-#         print(f"{'='*60}")
-#         for event in textract_events[:70]:
-#             print(json.dumps(event, indent=2))
-
-#         print(f"\n{'='*60}")
-#         print(f"Pages detected via text pattern fallback:")
-#         print(f"{'='*60}")
-#         for p in fallback[:10]:
-#             identifiers = [f"Table {t['table_number']}" for t in p.get("table_identifiers", [])]
-#             print(f"  Page {p['page']}: {', '.join(identifiers) if identifiers else 'continuation'}")
-
+#         pass
 #     else:
-#         # Full handler test
-#         class MockContext:
-#             function_name = "local-test"
-#             memory_limit_in_mb = 256
-#             invoked_function_arn = "arn:aws:lambda:eu-west-1:123456789012:function:local-test"
-#             aws_request_id = "local-request-id"
-
-#         test_event = {
-#             "s3_bucket": "datalake-raw-vigalcontec-dev-002332700133",
-#             "s3_key": "crf/clinical_pdfs/tecentriq/20260603164300/tecentriq-epar-product-information_en.pdf",
-#         }
-
-#         result = handler(test_event, MockContext())
-
-#         logger.info(
-#             "Handler result",
-#             extra={
-#                 "status": result["status"] if result else "N/A",
-#                 "product_name": result.get("product_name") if result else "N/A",
-#                 "total_tables": result.get("total_tables") if result else "N/A",
-#                 "events_count": len(result.get("textract_events", [])) if result else 0,
-#             }
-#         )
-
-#         # Pretty print the result
-#         if result:
-#             print(json.dumps(result, indent=2, ensure_ascii=False))
+#         pass

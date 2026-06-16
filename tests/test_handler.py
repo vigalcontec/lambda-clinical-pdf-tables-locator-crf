@@ -11,6 +11,7 @@ class TestHandler:
 
     @patch("handler.main.upload_json_to_s3")
     @patch("handler.main.create_job_record")
+    @patch("handler.main.get_job_status")
     @patch("handler.main.generate_textract_events")
     @patch("handler.main.analyze_pdf_pages")
     @patch("handler.main.get_total_pages")
@@ -23,6 +24,7 @@ class TestHandler:
         mock_total_pages: MagicMock,
         mock_analyze: MagicMock,
         mock_generate_events: MagicMock,
+        mock_get_job_status: MagicMock,
         mock_create_job: MagicMock,
         mock_upload_json: MagicMock,
         pdf_event: dict[str, Any],
@@ -35,7 +37,9 @@ class TestHandler:
         mock_download.return_value = b"fake pdf content"
         mock_hash.return_value = "abc123hash"
         mock_total_pages.return_value = 100
-        mock_analyze.return_value = [{"page": 7, "has_table_structure": True}]
+        # analyze_pdf_pages now returns (page_info, product_sections)
+        mock_analyze.return_value = ([{"page": 7, "has_table_structure": True}], [])
+        mock_get_job_status.return_value = None  # New job
         mock_generate_events.return_value = [
             {
                 "s3_bucket": "datalake-raw-dev",
@@ -75,14 +79,17 @@ class TestHandler:
              patch("handler.main.get_total_pages") as mock_pages, \
              patch("handler.main.analyze_pdf_pages") as mock_analyze, \
              patch("handler.main.generate_textract_events") as mock_events, \
+             patch("handler.main.get_job_status") as mock_get_job_status, \
              patch("handler.main.create_job_record") as mock_create_job, \
              patch("handler.main.upload_json_to_s3") as mock_upload:
 
             mock_download.return_value = b"pdf"
             mock_hash.return_value = "hash"
             mock_pages.return_value = 10
-            mock_analyze.return_value = []
+            # analyze_pdf_pages now returns (page_info, product_sections)
+            mock_analyze.return_value = ([], [])
             mock_events.return_value = []
+            mock_get_job_status.return_value = None  # New job
             mock_upload.return_value = "s3://bucket/path/MyProduct/20260520/doc_events.json"
 
             from handler.main import handler
@@ -125,6 +132,7 @@ class TestHandler:
 
     @patch("handler.main.upload_json_to_s3")
     @patch("handler.main.create_job_record")
+    @patch("handler.main.get_job_status")
     @patch("handler.main.generate_textract_events")
     @patch("handler.main.analyze_pdf_pages")
     @patch("handler.main.get_total_pages")
@@ -137,6 +145,7 @@ class TestHandler:
         mock_total_pages: MagicMock,
         mock_analyze: MagicMock,
         mock_generate_events: MagicMock,
+        mock_get_job_status: MagicMock,
         mock_create_job: MagicMock,
         mock_upload_json: MagicMock,
         lambda_context: Any,
@@ -147,8 +156,10 @@ class TestHandler:
         mock_download.return_value = b"fake pdf content"
         mock_hash.return_value = "abc123hash"
         mock_total_pages.return_value = 50
-        mock_analyze.return_value = []
+        # analyze_pdf_pages now returns (page_info, product_sections)
+        mock_analyze.return_value = ([], [])
         mock_generate_events.return_value = []
+        mock_get_job_status.return_value = None  # New job
         mock_upload_json.return_value = "s3://datalake-raw-dev/crf/clinical_pdfs/Keytruda/20260520/doc_events.json"
 
         from handler.main import handler
@@ -176,6 +187,7 @@ class TestHandler:
 
     @patch("handler.main.upload_json_to_s3")
     @patch("handler.main.create_job_record")
+    @patch("handler.main.get_job_status")
     @patch("handler.main.generate_textract_events")
     @patch("handler.main.analyze_pdf_pages")
     @patch("handler.main.get_total_pages")
@@ -188,6 +200,7 @@ class TestHandler:
         mock_total_pages: MagicMock,
         mock_analyze: MagicMock,
         mock_generate_events: MagicMock,
+        mock_get_job_status: MagicMock,
         mock_create_job: MagicMock,
         mock_upload_json: MagicMock,
         lambda_context: Any,
@@ -198,8 +211,10 @@ class TestHandler:
         mock_download.return_value = b"fake pdf content"
         mock_hash.return_value = "hash"
         mock_total_pages.return_value = 10
-        mock_analyze.return_value = []
+        # analyze_pdf_pages now returns (page_info, product_sections)
+        mock_analyze.return_value = ([], [])
         mock_generate_events.return_value = []
+        mock_get_job_status.return_value = None  # New job
         mock_upload_json.return_value = "s3://bucket/path/My Product/2026/file name_events.json"
 
         from handler.main import handler
@@ -298,6 +313,115 @@ class TestPdfUtils:
 
         assert result == []
 
+    def test_has_table_content_patterns_clinical_data(self) -> None:
+        """Test detection of clinical table content patterns."""
+        from handler.utils.pdf import has_table_content_patterns
+
+        # Text with clinical table patterns
+        text = """
+        Atezolizumab (n = 467) vs Chemotherapy (n = 464)
+        No. of deaths (%): 324 (69.4%) vs 350 (75.4%)
+        Median time to events (months): 8.6 vs 8.0
+        95% CI: 7.8, 9.6 vs 7.2, 8.6
+        Stratified hazard ratio (95% CI): 0.85 (0.73, 0.99)
+        """
+
+        assert has_table_content_patterns(text) is True
+
+    def test_has_table_content_patterns_no_match(self) -> None:
+        """Test no detection when clinical patterns are absent."""
+        from handler.utils.pdf import has_table_content_patterns
+
+        text = "This is regular paragraph text without any clinical data patterns."
+
+        assert has_table_content_patterns(text) is False
+
+    def test_has_table_content_patterns_single_pattern_not_enough(self) -> None:
+        """Test that a single pattern is not enough (requires 2+)."""
+        from handler.utils.pdf import has_table_content_patterns
+
+        # Only one pattern (n = X)
+        text = "The study included n = 467 patients."
+
+        assert has_table_content_patterns(text) is False
+
+
+class TestProductFormulationDetection:
+    """Tests for multi-product PDF formulation detection."""
+
+    def test_extract_product_formulations(self) -> None:
+        """Test extracting product formulation names from text."""
+        from handler.utils.pdf import extract_product_formulations
+
+        # Use text format similar to actual PDF (each on separate line)
+        text = """1. NAME OF THE MEDICINAL PRODUCT
+Tecentriq 840 mg concentrate for solution for infusion
+Tecentriq 1200 mg concentrate for solution for infusion
+2. QUALITATIVE AND QUANTITATIVE COMPOSITION"""
+
+        formulations = extract_product_formulations(text)
+
+        # Should find at least one formulation with 840 or 1200
+        assert len(formulations) >= 1
+        assert any("840" in f or "1200" in f for f in formulations)
+
+    def test_extract_product_formulations_single(self) -> None:
+        """Test extracting single product formulation."""
+        from handler.utils.pdf import extract_product_formulations
+
+        text = """1. NAME OF THE MEDICINAL PRODUCT
+        Tecentriq 1 875 mg solution for injection
+        2. QUALITATIVE AND QUANTITATIVE COMPOSITION"""
+
+        formulations = extract_product_formulations(text)
+
+        assert len(formulations) >= 1
+        assert any("1875" in f or "1 875" in f for f in formulations)
+
+    def test_extract_product_formulations_no_match(self) -> None:
+        """Test when no product formulations found."""
+        from handler.utils.pdf import extract_product_formulations
+
+        text = "This is just regular text without product names"
+        formulations = extract_product_formulations(text)
+
+        assert formulations == []
+
+    def test_get_formulation_for_page(self) -> None:
+        """Test getting formulation info for a specific page."""
+        from handler.utils.pdf import get_formulation_for_page
+
+        product_sections = [
+            {"start_page": 1, "end_page": 67, "formulation_key": "840_1200mg", "formulations": ["Tecentriq 840 mg"]},
+            {"start_page": 68, "end_page": 175, "formulation_key": "1875mg", "formulations": ["Tecentriq 1875 mg"]},
+        ]
+
+        # Page in first section
+        result = get_formulation_for_page(30, product_sections)
+        assert result is not None
+        assert result["formulation_key"] == "840_1200mg"
+
+        # Page in second section
+        result = get_formulation_for_page(100, product_sections)
+        assert result is not None
+        assert result["formulation_key"] == "1875mg"
+
+        # Page at boundary
+        result = get_formulation_for_page(68, product_sections)
+        assert result is not None
+        assert result["formulation_key"] == "1875mg"
+
+    def test_get_formulation_for_page_not_found(self) -> None:
+        """Test when page is not in any section."""
+        from handler.utils.pdf import get_formulation_for_page
+
+        product_sections = [
+            {"start_page": 10, "end_page": 50, "formulation_key": "test", "formulations": []},
+        ]
+
+        result = get_formulation_for_page(5, product_sections)
+        assert result is None
+
 
 class TestTextractEvents:
     """Tests for Textract event generation."""
@@ -369,6 +493,92 @@ class TestTextractEvents:
         # Should be sorted: Table 1 (p7, p8), Table 6 (p32), Table 7 (p32)
         table_numbers = [e["table_number"] for e in events]
         assert table_numbers == [1, 1, 6, 7]
+
+    def test_generate_textract_events_multi_product(self) -> None:
+        """Test textract events include formulation info for multi-product PDFs."""
+        from handler.utils.textract_events import generate_textract_events
+
+        # Simulate multi-product PDF with two formulations
+        page_info = [
+            {
+                "page": 4,
+                "table_identifiers": [{"table_number": 1, "description": "Dose for 840mg"}],
+                "tables_count": 1,
+                "has_table_structure": True,
+                "formulation_key": "840_1200mg",
+                "formulations": ["Tecentriq 840 mg", "Tecentriq 1200 mg"],
+            },
+            {
+                "page": 70,
+                "table_identifiers": [{"table_number": 1, "description": "Dose for 1875mg"}],
+                "tables_count": 1,
+                "has_table_structure": True,
+                "formulation_key": "1875mg",
+                "formulations": ["Tecentriq 1875 mg"],
+            },
+        ]
+
+        events = generate_textract_events(
+            page_info, "bucket", "key", "Tecentriq", "job_multi"
+        )
+
+        assert len(events) == 2
+
+        # First event should have 840_1200mg formulation
+        event_840 = next(e for e in events if e["page"] == 4)
+        assert event_840["formulation_key"] == "840_1200mg"
+        assert "Tecentriq 840 mg" in event_840["formulations"]
+
+        # Second event should have 1875mg formulation
+        event_1875 = next(e for e in events if e["page"] == 70)
+        assert event_1875["formulation_key"] == "1875mg"
+        assert "Tecentriq 1875 mg" in event_1875["formulations"]
+
+    def test_generate_textract_events_multi_product_sorted(self) -> None:
+        """Test multi-product events are sorted by formulation_key, then table_number."""
+        from handler.utils.textract_events import generate_textract_events
+
+        page_info = [
+            {
+                "page": 70,
+                "table_identifiers": [{"table_number": 1, "description": "Table 1 for 1875mg"}],
+                "tables_count": 1,
+                "has_table_structure": True,
+                "formulation_key": "1875mg",
+                "formulations": ["Tecentriq 1875 mg"],
+            },
+            {
+                "page": 4,
+                "table_identifiers": [{"table_number": 1, "description": "Table 1 for 840mg"}],
+                "tables_count": 1,
+                "has_table_structure": True,
+                "formulation_key": "840_1200mg",
+                "formulations": ["Tecentriq 840 mg"],
+            },
+        ]
+
+        events = generate_textract_events(
+            page_info, "bucket", "key", "Tecentriq", "job_sorted_multi"
+        )
+
+        # Should be sorted by formulation_key: 1875mg comes before 840_1200mg alphabetically
+        assert events[0]["formulation_key"] == "1875mg"
+        assert events[1]["formulation_key"] == "840_1200mg"
+
+    def test_generate_textract_events_single_product_no_formulation(
+        self, sample_page_info: list[dict[str, Any]]
+    ) -> None:
+        """Test single-product PDFs don't include formulation info."""
+        from handler.utils.textract_events import generate_textract_events
+
+        events = generate_textract_events(
+            sample_page_info, "bucket", "key", "Product", "job_single"
+        )
+
+        # Single product PDFs should not have formulation_key
+        for event in events:
+            assert "formulation_key" not in event
+            assert "formulations" not in event
 
 
 class TestConfig:
@@ -658,6 +868,7 @@ class TestDynamoDBUtils:
         mock_resource = MagicMock()
         mock_resource.Table.return_value = mock_table
         mock_get_resource.return_value = mock_resource
+        # SK format produces key "1__5" after parsing (TABLE#1#PAGE#5 -> 1__5)
         mock_table.query.return_value = {
             "Items": [
                 {"SK": "TABLE#1#PAGE#5", "status": "SUCCESS"},
@@ -669,8 +880,10 @@ class TestDynamoDBUtils:
             {"table_number": 2, "page": 10},
         ]
 
+        # The filter uses key format "{table_number}_{page}" to match
         result = filter_pending_events("table", "job123", events)
 
+        # Table 1 page 5 should be skipped (SUCCESS), only table 2 page 10 remains
         assert len(result) == 1
         assert result[0]["table_number"] == 2
 

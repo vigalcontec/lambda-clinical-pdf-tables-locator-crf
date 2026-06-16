@@ -25,6 +25,18 @@ TABLE_CONTENT_PATTERNS = [
     re.compile(r"\bmedian\b.*\b(months?|years?|days?)\b", re.IGNORECASE),  # Median time
 ]
 
+# Pattern to detect "1. NAME OF THE MEDICINAL PRODUCT" section header
+SECTION_1_PATTERN = re.compile(
+    r"1\.\s*\n?\s*NAME OF THE MEDICINAL PRODUCT",
+    re.IGNORECASE
+)
+
+# Pattern to extract product formulation names (e.g., "Tecentriq 840 mg concentrate for solution")
+PRODUCT_FORMULATION_PATTERN = re.compile(
+    r"([A-Z][a-zA-Z]+)\s+([\d\s,]+)\s*mg\s+([a-zA-Z\s]+(?:for\s+[a-zA-Z\s]+)?)",
+    re.IGNORECASE
+)
+
 
 def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
     """Extract all table identifiers from text.
@@ -46,6 +58,128 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
         }
         for num, desc in matches
     ]
+
+
+def extract_product_formulations(text: str) -> list[str]:
+    """Extract product formulation names from text.
+
+    Looks for patterns like "Tecentriq 840 mg concentrate for solution for infusion"
+    after the "1. NAME OF THE MEDICINAL PRODUCT" section header.
+
+    Args:
+        text: Page text content
+
+    Returns:
+        List of product formulation names found
+    """
+    formulations = []
+    matches = PRODUCT_FORMULATION_PATTERN.findall(text)
+    for brand, dose, form in matches:
+        # Clean up and normalize the formulation name
+        dose_clean = dose.strip().replace(" ", "").replace(",", "_")
+        form_clean = " ".join(form.split())  # Normalize whitespace
+        formulation = f"{brand.strip()} {dose_clean} mg {form_clean}".strip()
+        if formulation not in formulations:
+            formulations.append(formulation)
+    return formulations
+
+
+def detect_product_sections(pdf_bytes: bytes) -> list[dict[str, Any]]:
+    """Detect product formulation sections in a multi-product PDF.
+
+    Scans the PDF for "1. NAME OF THE MEDICINAL PRODUCT" sections
+    and extracts the product formulations associated with each section.
+
+    Args:
+        pdf_bytes: PDF file content as bytes
+
+    Returns:
+        List of product sections with:
+        - start_page: First page of this product section (1-indexed)
+        - end_page: Last page of this product section (1-indexed)
+        - formulations: List of product formulation names
+        - formulation_key: Normalized key for this formulation group
+    """
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    sections: list[dict[str, Any]] = []
+
+    for page_num in range(len(doc)):
+        page = doc.load_page(page_num)
+        text = page.get_text("text")
+
+        # Check if this page has a "1. NAME OF THE MEDICINAL PRODUCT" section
+        if SECTION_1_PATTERN.search(text):
+            formulations = extract_product_formulations(text)
+            if formulations:
+                sections.append({
+                    "start_page": page_num + 1,  # 1-indexed
+                    "end_page": None,  # Will be set later
+                    "formulations": formulations,
+                    "formulation_key": _create_formulation_key(formulations),
+                })
+
+    # Set end_page for each section (page before next section starts, or last page)
+    total_pages = len(doc)
+    for i, section in enumerate(sections):
+        if i + 1 < len(sections):
+            section["end_page"] = sections[i + 1]["start_page"] - 1
+        else:
+            section["end_page"] = total_pages
+
+    doc.close()
+
+    logger.info(
+        "Product sections detected",
+        extra={
+            "sections_count": len(sections),
+            "sections": [
+                {
+                    "pages": f"{s['start_page']}-{s['end_page']}",
+                    "formulation_key": s["formulation_key"],
+                }
+                for s in sections
+            ],
+        }
+    )
+
+    return sections
+
+
+def _create_formulation_key(formulations: list[str]) -> str:
+    """Create a normalized key from formulation names.
+
+    Args:
+        formulations: List of formulation names
+
+    Returns:
+        Normalized key string (e.g., "840mg_1200mg" or "1875mg")
+    """
+    # Extract doses from formulations
+    doses = []
+    for f in formulations:
+        match = re.search(r"(\d+)\s*mg", f, re.IGNORECASE)
+        if match:
+            doses.append(match.group(1))
+
+    if doses:
+        return "_".join(sorted(set(doses), key=int)) + "mg"
+    return "unknown"
+
+
+def get_formulation_for_page(page_num: int, product_sections: list[dict]) -> dict[str, Any] | None:
+    """Get the product formulation info for a given page.
+
+    Args:
+        page_num: Page number (1-indexed)
+        product_sections: List of product sections from detect_product_sections
+
+    Returns:
+        Product section dict if found, None otherwise
+    """
+    for section in product_sections:
+        if section["start_page"] <= page_num <= section["end_page"]:
+            return section
+    return None
 
 
 def has_table_content_patterns(text: str) -> bool:
@@ -130,23 +264,32 @@ def detect_tables_hybrid(page: fitz.Page, text: str, table_identifiers: list[dic
 
 
 @tracer.capture_method
-def analyze_pdf_pages(pdf_bytes: bytes) -> list[dict[str, Any]]:
-    """Analyze all pages in a PDF for table content.
+def analyze_pdf_pages(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Analyze all pages in a PDF for table content and product formulations.
 
     Uses hybrid detection: PyMuPDF structural detection + text-based fallback
     for complex tables that may not be detected structurally.
+
+    Also detects product formulation sections for multi-product PDFs.
 
     Args:
         pdf_bytes: PDF file content as bytes
 
     Returns:
-        List of page analysis dictionaries with:
-        - page: Page number (1-indexed)
-        - table_identifiers: List of table identifiers found
-        - tables_count: Number of tables on the page
-        - has_table_structure: Whether page has any table
-        - detection_method: How the table was detected (structural/text_pattern/none)
+        Tuple of:
+        - List of page analysis dictionaries with:
+          - page: Page number (1-indexed)
+          - table_identifiers: List of table identifiers found
+          - tables_count: Number of tables on the page
+          - has_table_structure: Whether page has any table
+          - detection_method: How the table was detected (structural/text_pattern/none)
+          - formulation_key: Product formulation key for this page (if multi-product PDF)
+          - formulations: List of product formulation names for this page
+        - List of product sections (from detect_product_sections)
     """
+    # First, detect product sections
+    product_sections = detect_product_sections(pdf_bytes)
+
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page_info: list[dict[str, Any]] = []
 
@@ -168,19 +311,30 @@ def analyze_pdf_pages(pdf_bytes: bytes) -> list[dict[str, Any]]:
         else:
             detection_method = "none"
 
-        page_info.append({
+        # Get product formulation for this page
+        formulation_info = get_formulation_for_page(page_num + 1, product_sections)
+
+        page_data = {
             "page": page_num + 1,  # 1-indexed
             "table_identifiers": table_identifiers,
             "tables_count": tables_count,
             "has_table_structure": has_table_structure,
             "detection_method": detection_method,
-        })
+        }
+
+        # Add formulation info if this is a multi-product PDF
+        if formulation_info:
+            page_data["formulation_key"] = formulation_info["formulation_key"]
+            page_data["formulations"] = formulation_info["formulations"]
+
+        page_info.append(page_data)
 
     doc.close()
 
     # Log summary with detection methods
     structural_pages = sum(1 for p in page_info if p["detection_method"] == "structural")
     fallback_pages = sum(1 for p in page_info if p["detection_method"] == "text_pattern")
+    formulation_keys = list(set(p.get("formulation_key", "single") for p in page_info))
 
     logger.info(
         "PDF pages analyzed",
@@ -189,10 +343,12 @@ def analyze_pdf_pages(pdf_bytes: bytes) -> list[dict[str, Any]]:
             "pages_with_tables": sum(1 for p in page_info if p["has_table_structure"]),
             "structural_detection": structural_pages,
             "text_pattern_fallback": fallback_pages,
+            "product_formulations": formulation_keys,
+            "is_multi_product": len(product_sections) > 1,
         }
     )
 
-    return page_info
+    return page_info, product_sections
 
 
 def get_total_pages(pdf_bytes: bytes) -> int:

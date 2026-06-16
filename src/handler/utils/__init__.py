@@ -10,8 +10,11 @@ from handler.utils.dynamodb import (
 from handler.utils.pdf import (
     analyze_pdf_pages,
     count_tables_on_page,
+    detect_product_sections,
     detect_tables_hybrid,
+    extract_product_formulations,
     extract_table_identifiers,
+    get_formulation_for_page,
     get_total_pages,
     has_table_content_patterns,
 )
@@ -27,8 +30,11 @@ __all__ = [
     # PDF
     "analyze_pdf_pages",
     "count_tables_on_page",
+    "detect_product_sections",
     "detect_tables_hybrid",
+    "extract_product_formulations",
     "extract_table_identifiers",
+    "get_formulation_for_page",
     "get_total_pages",
     "has_table_content_patterns",
     # Textract Events

@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-06-16
+
+### Added
+
+- **Multi-Product PDF Support** - Detects and associates tables with their correct product formulations
+  - Detects "1. NAME OF THE MEDICINAL PRODUCT" sections in PDFs
+  - Extracts product formulation names (e.g., "Tecentriq 840 mg concentrate for solution")
+  - Associates each table with its formulation using `formulation_key`
+  - Allows same table number (e.g., "Table 1") to exist in different formulation sections
+
+- **Hybrid Table Detection** - Improved table detection combining structural and text-based methods
+  - Primary: PyMuPDF structural detection with improved parameters
+  - Fallback: Text pattern detection for complex tables (clinical data patterns)
+  - Detects tables with: n=X, percentages, 95% CI, hazard ratios, median time
+
+- **New PDF Utility Functions**
+  - `detect_product_sections()` - Find all product formulation sections in PDF
+  - `extract_product_formulations()` - Extract formulation names from text
+  - `get_formulation_for_page()` - Get formulation info for a specific page
+  - `has_table_content_patterns()` - Check for clinical table data patterns
+
+### Changed
+
+- **`analyze_pdf_pages()` Return Type** - Now returns tuple `(page_info, product_sections)`
+- **Textract Events** - Include `formulation_key` and `formulations` for multi-product PDFs
+- **Event Sorting** - Multi-product events sorted by formulation_key, then table_number, then page
+- **Logging** - Added detection method tracking (structural vs text_pattern)
+
+### Event Output (Multi-Product PDF)
+
+```json
+{
+  "job_id": "abc123...",
+  "table_number": 1,
+  "page": 4,
+  "formulation_key": "840_1200mg",
+  "formulations": [
+    "Tecentriq 840 mg concentrate for solution for infusion",
+    "Tecentriq 1200 mg concentrate for solution for infusion"
+  ]
+}
+```
+
+---
+
+## [2.2.0] - 2026-06-09
+
+### Added
+
+- **Incremental Reprocessing** - Table-level tracking in DynamoDB to avoid reprocessing successful tables
+  - `get_job_status()` - Check if job already exists
+  - `get_processed_tables()` - Get status of all tables for a job
+  - `filter_pending_events()` - Filter events to only pending/failed tables
+- **Force Reprocess Flag** - `force_reprocess: true` in event bypasses idempotency checks
+- **Job ID in Events** - Each Textract event now includes `job_id` for tracking
+
+### Changed
+
+- **Idempotency** - Same PDF (by content hash) skips already successful tables
+- **Job Status** - Updates to `REPROCESSING` when reprocessing existing job
+
+---
+
 ## [2.1.0] - 2026-05-24
 
 ### Added

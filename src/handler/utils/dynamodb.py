@@ -70,9 +70,13 @@ def get_processed_tables(table_name: str, job_id: str) -> dict[str, str]:
         sk = item.get("SK", "")
         status = item.get("status", "UNKNOWN")
         # Extract table_number and page from SK
-        parts = sk.replace("TABLE#", "").replace("PAGE#", "_").split("#")
-        if len(parts) >= 2:
-            table_key = f"{parts[0]}_{parts[1]}"
+        # Example: "TABLE#1#PAGE#5" -> table_number=1, page=5 -> key="1_5"
+        parts = sk.split("#")
+        # parts = ["TABLE", "1", "PAGE", "5"]
+        if len(parts) >= 4:
+            table_number = parts[1]
+            page = parts[3]
+            table_key = f"{table_number}_{page}"
             processed[table_key] = status
 
     logger.info(
