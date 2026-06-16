@@ -241,6 +241,161 @@ class TestHandler:
             "path/My Product/2026/file name.pdf"
         )
 
+    @patch("handler.main.upload_json_to_s3")
+    @patch("handler.main.update_job_status")
+    @patch("handler.main.create_job_record")
+    @patch("handler.main.get_job_status")
+    @patch("handler.main.filter_pending_events")
+    @patch("handler.main.generate_textract_events")
+    @patch("handler.main.analyze_pdf_pages")
+    @patch("handler.main.get_total_pages")
+    @patch("handler.main.generate_file_hash")
+    @patch("handler.main.download_pdf_from_s3")
+    def test_handler_reprocessing_existing_job(
+        self,
+        mock_download: MagicMock,
+        mock_hash: MagicMock,
+        mock_total_pages: MagicMock,
+        mock_analyze: MagicMock,
+        mock_generate_events: MagicMock,
+        mock_filter_events: MagicMock,
+        mock_get_job_status: MagicMock,
+        mock_create_job: MagicMock,
+        mock_update_job_status: MagicMock,
+        mock_upload_json: MagicMock,
+        pdf_event: dict[str, Any],
+        lambda_context: Any,
+    ) -> None:
+        """Test handler reprocessing an existing job."""
+        get_settings.cache_clear()
+
+        mock_download.return_value = b"fake pdf content"
+        mock_hash.return_value = "abc123hash"
+        mock_total_pages.return_value = 100
+        mock_analyze.return_value = ([{"page": 7, "has_table_structure": True}], [])
+        mock_generate_events.return_value = [{"table_number": 1, "page": 7}]
+        # Existing job found
+        mock_get_job_status.return_value = {"status": "FAILED", "PK": "JOB#abc123hash"}
+        mock_filter_events.return_value = [{"table_number": 1, "page": 7}]
+        mock_upload_json.return_value = "s3://bucket/path_events.json"
+
+        from handler.main import handler
+
+        result = handler(pdf_event, lambda_context)
+        assert result is None
+
+        # Should have called filter_pending_events
+        mock_filter_events.assert_called_once()
+        # Should have updated job status to REPROCESSING
+        mock_update_job_status.assert_called()
+
+    @patch("handler.main.upload_json_to_s3")
+    @patch("handler.main.create_job_record")
+    @patch("handler.main.get_job_status")
+    @patch("handler.main.filter_pending_events")
+    @patch("handler.main.generate_textract_events")
+    @patch("handler.main.analyze_pdf_pages")
+    @patch("handler.main.get_total_pages")
+    @patch("handler.main.generate_file_hash")
+    @patch("handler.main.download_pdf_from_s3")
+    def test_handler_all_tables_already_processed(
+        self,
+        mock_download: MagicMock,
+        mock_hash: MagicMock,
+        mock_total_pages: MagicMock,
+        mock_analyze: MagicMock,
+        mock_generate_events: MagicMock,
+        mock_filter_events: MagicMock,
+        mock_get_job_status: MagicMock,
+        mock_create_job: MagicMock,
+        mock_upload_json: MagicMock,
+        pdf_event: dict[str, Any],
+        lambda_context: Any,
+    ) -> None:
+        """Test handler when all tables already processed successfully."""
+        get_settings.cache_clear()
+
+        mock_download.return_value = b"fake pdf content"
+        mock_hash.return_value = "abc123hash"
+        mock_total_pages.return_value = 100
+        mock_analyze.return_value = ([{"page": 7, "has_table_structure": True}], [])
+        mock_generate_events.return_value = [{"table_number": 1, "page": 7}]
+        mock_get_job_status.return_value = {"status": "SUCCESS", "PK": "JOB#abc123hash"}
+        # All tables already processed - empty list returned
+        mock_filter_events.return_value = []
+
+        from handler.main import handler
+
+        result = handler(pdf_event, lambda_context)
+        assert result is None
+
+        # Should NOT have called create_job_record or upload_json (skipped)
+        mock_create_job.assert_not_called()
+        mock_upload_json.assert_not_called()
+
+    @patch("handler.main.update_job_status")
+    @patch("handler.main.download_pdf_from_s3")
+    def test_handler_empty_pdf_raises_error(
+        self,
+        mock_download: MagicMock,
+        mock_update_status: MagicMock,
+        pdf_event: dict[str, Any],
+        lambda_context: Any,
+    ) -> None:
+        """Test handler raises error for empty PDF."""
+        import pytest
+
+        get_settings.cache_clear()
+
+        mock_download.return_value = b""  # Empty PDF
+
+        from handler.main import handler
+
+        with pytest.raises(ValueError, match="Downloaded PDF is empty"):
+            handler(pdf_event, lambda_context)
+
+    @patch("handler.main.upload_json_to_s3")
+    @patch("handler.main.create_job_record")
+    @patch("handler.main.get_job_status")
+    @patch("handler.main.generate_textract_events")
+    @patch("handler.main.analyze_pdf_pages")
+    @patch("handler.main.get_total_pages")
+    @patch("handler.main.generate_file_hash")
+    @patch("handler.main.download_pdf_from_s3")
+    def test_handler_multi_product_pdf(
+        self,
+        mock_download: MagicMock,
+        mock_hash: MagicMock,
+        mock_total_pages: MagicMock,
+        mock_analyze: MagicMock,
+        mock_generate_events: MagicMock,
+        mock_get_job_status: MagicMock,
+        mock_create_job: MagicMock,
+        mock_upload_json: MagicMock,
+        pdf_event: dict[str, Any],
+        lambda_context: Any,
+    ) -> None:
+        """Test handler with multi-product PDF."""
+        get_settings.cache_clear()
+
+        mock_download.return_value = b"fake pdf content"
+        mock_hash.return_value = "abc123hash"
+        mock_total_pages.return_value = 100
+        # Multi-product PDF with 2 sections
+        product_sections = [
+            {"start_page": 1, "end_page": 50, "formulation_key": "840mg", "formulations": ["840 mg"]},
+            {"start_page": 51, "end_page": 100, "formulation_key": "1200mg", "formulations": ["1200 mg"]},
+        ]
+        mock_analyze.return_value = ([{"page": 7, "has_table_structure": True}], product_sections)
+        mock_generate_events.return_value = [{"table_number": 1, "page": 7}]
+        mock_get_job_status.return_value = None
+        mock_upload_json.return_value = "s3://bucket/path_events.json"
+
+        from handler.main import handler
+
+        result = handler(pdf_event, lambda_context)
+        assert result is None
+
 
 class TestS3Utils:
     """Tests for S3 utility functions."""
@@ -421,6 +576,150 @@ Tecentriq 1200 mg concentrate for solution for infusion
 
         result = get_formulation_for_page(5, product_sections)
         assert result is None
+
+    def test_create_formulation_key(self) -> None:
+        """Test creating formulation key from formulation names."""
+        from handler.utils.pdf import _create_formulation_key
+
+        # Multiple doses
+        formulations = ["Tecentriq 840 mg concentrate", "Tecentriq 1200 mg concentrate"]
+        key = _create_formulation_key(formulations)
+        assert "840" in key
+        assert "1200" in key
+        assert key.endswith("mg")
+
+        # Single dose
+        formulations = ["Tecentriq 1875 mg solution"]
+        key = _create_formulation_key(formulations)
+        assert "1875" in key
+        assert key.endswith("mg")
+
+    def test_create_formulation_key_no_dose(self) -> None:
+        """Test formulation key when no dose found."""
+        from handler.utils.pdf import _create_formulation_key
+
+        formulations = ["Some product without dose"]
+        key = _create_formulation_key(formulations)
+        assert key == "unknown"
+
+    def test_create_formulation_key_empty(self) -> None:
+        """Test formulation key with empty list."""
+        from handler.utils.pdf import _create_formulation_key
+
+        key = _create_formulation_key([])
+        assert key == "unknown"
+
+    @patch("handler.utils.pdf.fitz")
+    def test_count_tables_on_page_with_tables(self, mock_fitz: MagicMock) -> None:
+        """Test counting tables on a page with tables found."""
+        from handler.utils.pdf import count_tables_on_page
+
+        mock_page = MagicMock()
+        mock_tables_result = MagicMock()
+        mock_tables_result.tables = [MagicMock(), MagicMock()]  # 2 tables
+        mock_page.find_tables.return_value = mock_tables_result
+
+        result = count_tables_on_page(mock_page)
+        assert result == 2
+
+    @patch("handler.utils.pdf.fitz")
+    def test_count_tables_on_page_no_tables(self, mock_fitz: MagicMock) -> None:
+        """Test counting tables on a page with no tables."""
+        from handler.utils.pdf import count_tables_on_page
+
+        mock_page = MagicMock()
+        mock_tables_result = MagicMock()
+        mock_tables_result.tables = []
+        mock_page.find_tables.return_value = mock_tables_result
+
+        result = count_tables_on_page(mock_page)
+        assert result == 0
+
+    @patch("handler.utils.pdf.fitz")
+    def test_count_tables_on_page_exception(self, mock_fitz: MagicMock) -> None:
+        """Test counting tables handles exceptions gracefully."""
+        from handler.utils.pdf import count_tables_on_page
+
+        mock_page = MagicMock()
+        mock_page.find_tables.side_effect = Exception("PDF error")
+
+        result = count_tables_on_page(mock_page)
+        assert result == 0
+
+    @patch("handler.utils.pdf.count_tables_on_page")
+    def test_detect_tables_hybrid_structural(self, mock_count: MagicMock) -> None:
+        """Test hybrid detection with structural tables found."""
+        from handler.utils.pdf import detect_tables_hybrid
+
+        mock_count.return_value = 2
+        mock_page = MagicMock()
+
+        count, has_table = detect_tables_hybrid(mock_page, "some text", [])
+        assert count == 2
+        assert has_table is True
+
+    @patch("handler.utils.pdf.count_tables_on_page")
+    @patch("handler.utils.pdf.has_table_content_patterns")
+    def test_detect_tables_hybrid_fallback_with_identifier(
+        self, mock_patterns: MagicMock, mock_count: MagicMock
+    ) -> None:
+        """Test hybrid detection fallback with table identifier."""
+        from handler.utils.pdf import detect_tables_hybrid
+
+        mock_count.return_value = 0  # No structural tables
+        mock_patterns.return_value = True  # Has table patterns
+        mock_page = MagicMock()
+        identifiers = [{"table_number": 1, "description": "Test"}]
+
+        count, has_table = detect_tables_hybrid(mock_page, "text with patterns", identifiers)
+        assert count == 1
+        assert has_table is True
+
+    @patch("handler.utils.pdf.count_tables_on_page")
+    @patch("handler.utils.pdf.has_table_content_patterns")
+    def test_detect_tables_hybrid_fallback_continuation(
+        self, mock_patterns: MagicMock, mock_count: MagicMock
+    ) -> None:
+        """Test hybrid detection fallback for continuation page."""
+        from handler.utils.pdf import detect_tables_hybrid
+
+        mock_count.return_value = 0  # No structural tables
+        mock_patterns.return_value = True  # Has table patterns
+        mock_page = MagicMock()
+
+        # No identifiers but has patterns (continuation page)
+        count, has_table = detect_tables_hybrid(mock_page, "text with patterns", [])
+        assert count == 1
+        assert has_table is True
+
+    @patch("handler.utils.pdf.count_tables_on_page")
+    @patch("handler.utils.pdf.has_table_content_patterns")
+    def test_detect_tables_hybrid_no_tables(
+        self, mock_patterns: MagicMock, mock_count: MagicMock
+    ) -> None:
+        """Test hybrid detection with no tables found."""
+        from handler.utils.pdf import detect_tables_hybrid
+
+        mock_count.return_value = 0
+        mock_patterns.return_value = False
+        mock_page = MagicMock()
+
+        count, has_table = detect_tables_hybrid(mock_page, "regular text", [])
+        assert count == 0
+        assert has_table is False
+
+    @patch("handler.utils.pdf.fitz")
+    def test_get_total_pages(self, mock_fitz: MagicMock) -> None:
+        """Test getting total pages from PDF."""
+        from handler.utils.pdf import get_total_pages
+
+        mock_doc = MagicMock()
+        mock_doc.__len__ = MagicMock(return_value=50)
+        mock_fitz.open.return_value = mock_doc
+
+        result = get_total_pages(b"fake pdf bytes")
+        assert result == 50
+        mock_doc.close.assert_called_once()
 
 
 class TestTextractEvents:
