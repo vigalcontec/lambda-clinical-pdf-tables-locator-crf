@@ -61,7 +61,7 @@ def generate_textract_events(
     current_formulation_key: str | None = None
 
     # Check if this is a multi-product PDF
-    formulation_keys = set(p.get("formulation_key") for p in page_info if p.get("formulation_key"))
+    formulation_keys = {p.get("formulation_key") for p in page_info if p.get("formulation_key")}
     is_multi_product = len(formulation_keys) > 1
 
     for info in page_info:

@@ -334,7 +334,7 @@ def analyze_pdf_pages(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], list[dict
     # Log summary with detection methods
     structural_pages = sum(1 for p in page_info if p["detection_method"] == "structural")
     fallback_pages = sum(1 for p in page_info if p["detection_method"] == "text_pattern")
-    formulation_keys = list(set(p.get("formulation_key", "single") for p in page_info))
+    formulation_keys = list({p.get("formulation_key", "single") for p in page_info})
 
     logger.info(
         "PDF pages analyzed",
