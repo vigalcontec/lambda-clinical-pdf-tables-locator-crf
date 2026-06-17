@@ -31,9 +31,9 @@ SECTION_1_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Pattern to extract product formulation names (e.g., "Tecentriq 840 mg concentrate for solution")
-PRODUCT_FORMULATION_PATTERN = re.compile(
-    r"([A-Z][a-zA-Z]+)\s+([\d\s,]+)\s*mg\s+([a-zA-Z\s]+(?:for\s+[a-zA-Z\s]+)?)",
+# Pattern to detect "2. QUALITATIVE AND QUANTITATIVE COMPOSITION" section header
+SECTION_2_PATTERN = re.compile(
+    r"2\.\s*\n?\s*QUALITATIVE AND QUANTITATIVE COMPOSITION",
     re.IGNORECASE
 )
 
@@ -63,8 +63,8 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
 def extract_product_formulations(text: str) -> list[str]:
     """Extract product formulation names from text.
 
-    Looks for patterns like "Tecentriq 840 mg concentrate for solution for infusion"
-    after the "1. NAME OF THE MEDICINAL PRODUCT" section header.
+    Extracts only the lines between "1. NAME OF THE MEDICINAL PRODUCT" and
+    "2. QUALITATIVE AND QUANTITATIVE COMPOSITION" section headers.
 
     Args:
         text: Page text content
@@ -73,14 +73,31 @@ def extract_product_formulations(text: str) -> list[str]:
         List of product formulation names found
     """
     formulations = []
-    matches = PRODUCT_FORMULATION_PATTERN.findall(text)
-    for brand, dose, form in matches:
-        # Clean up and normalize the formulation name
-        dose_clean = dose.strip().replace(" ", "").replace(",", "_")
-        form_clean = " ".join(form.split())  # Normalize whitespace
-        formulation = f"{brand.strip()} {dose_clean} mg {form_clean}".strip()
-        if formulation not in formulations:
-            formulations.append(formulation)
+
+    # Find section 1 header
+    section1_match = SECTION_1_PATTERN.search(text)
+    if not section1_match:
+        return formulations
+
+    # Find section 2 header (marks the end of formulation list)
+    section2_match = SECTION_2_PATTERN.search(text)
+
+    # Extract text between section 1 and section 2 (or end of text)
+    start_pos = section1_match.end()
+    end_pos = section2_match.start() if section2_match else len(text)
+
+    section_text = text[start_pos:end_pos]
+
+    # Extract each non-empty line as a formulation
+    for line in section_text.split("\n"):
+        line = line.strip()
+        # Skip empty lines and lines that look like headers/numbers
+        if line and len(line) > 5 and not line.isdigit():
+            # Clean up the formulation name
+            formulation = " ".join(line.split())  # Normalize whitespace
+            if formulation not in formulations:
+                formulations.append(formulation)
+
     return formulations
 
 
@@ -152,14 +169,18 @@ def _create_formulation_key(formulations: list[str]) -> str:
         formulations: List of formulation names
 
     Returns:
-        Normalized key string (e.g., "840mg_1200mg" or "1875mg")
+        Normalized key string (e.g., "840_1200mg" or "1875mg")
     """
-    # Extract doses from formulations
+    # Extract doses from formulations (handles spaces in numbers like "1 200 mg")
     doses = []
     for f in formulations:
-        match = re.search(r"(\d+)\s*mg", f, re.IGNORECASE)
+        # Match digits with optional spaces before "mg"
+        match = re.search(r"([\d\s]+)\s*mg", f, re.IGNORECASE)
         if match:
-            doses.append(match.group(1))
+            # Remove spaces from the dose number
+            dose = match.group(1).replace(" ", "")
+            if dose.isdigit():
+                doses.append(dose)
 
     if doses:
         return "_".join(sorted(set(doses), key=int)) + "mg"

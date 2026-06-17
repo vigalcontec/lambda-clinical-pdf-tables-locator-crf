@@ -511,27 +511,29 @@ class TestProductFormulationDetection:
         # Use text format similar to actual PDF (each on separate line)
         text = """1. NAME OF THE MEDICINAL PRODUCT
 Tecentriq 840 mg concentrate for solution for infusion
-Tecentriq 1200 mg concentrate for solution for infusion
-2. QUALITATIVE AND QUANTITATIVE COMPOSITION"""
+Tecentriq 1 200 mg concentrate for solution for infusion
+2. QUALITATIVE AND QUANTITATIVE COMPOSITION
+Some other text that should not be included"""
 
         formulations = extract_product_formulations(text)
 
-        # Should find at least one formulation with 840 or 1200
-        assert len(formulations) >= 1
-        assert any("840" in f or "1200" in f for f in formulations)
+        # Should find exactly 2 formulations
+        assert len(formulations) == 2
+        assert "Tecentriq 840 mg concentrate for solution for infusion" in formulations
+        assert "Tecentriq 1 200 mg concentrate for solution for infusion" in formulations
 
     def test_extract_product_formulations_single(self) -> None:
         """Test extracting single product formulation."""
         from handler.utils.pdf import extract_product_formulations
 
         text = """1. NAME OF THE MEDICINAL PRODUCT
-        Tecentriq 1 875 mg solution for injection
-        2. QUALITATIVE AND QUANTITATIVE COMPOSITION"""
+Tecentriq 1 875 mg solution for injection
+2. QUALITATIVE AND QUANTITATIVE COMPOSITION"""
 
         formulations = extract_product_formulations(text)
 
-        assert len(formulations) >= 1
-        assert any("1875" in f or "1 875" in f for f in formulations)
+        assert len(formulations) == 1
+        assert "Tecentriq 1 875 mg solution for injection" in formulations
 
     def test_extract_product_formulations_no_match(self) -> None:
         """Test when no product formulations found."""
@@ -582,16 +584,19 @@ Tecentriq 1200 mg concentrate for solution for infusion
         from handler.utils.pdf import _create_formulation_key
 
         # Multiple doses
-        formulations = ["Tecentriq 840 mg concentrate", "Tecentriq 1200 mg concentrate"]
+        formulations = [
+            "Tecentriq 840 mg concentrate for solution for infusion",
+            "Tecentriq 1 200 mg concentrate for solution for infusion"
+        ]
         key = _create_formulation_key(formulations)
         assert "840" in key
-        assert "1200" in key
+        assert "1200" in key or "1_200" in key
         assert key.endswith("mg")
 
         # Single dose
-        formulations = ["Tecentriq 1875 mg solution"]
+        formulations = ["Tecentriq 1 875 mg solution for injection"]
         key = _create_formulation_key(formulations)
-        assert "1875" in key
+        assert "1875" in key or "1_875" in key
         assert key.endswith("mg")
 
     def test_create_formulation_key_no_dose(self) -> None:
