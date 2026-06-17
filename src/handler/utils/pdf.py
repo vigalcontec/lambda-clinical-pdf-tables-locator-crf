@@ -72,7 +72,7 @@ def extract_product_formulations(text: str) -> list[str]:
     Returns:
         List of product formulation names found
     """
-    formulations = []
+    formulations: list[str] = []
 
     # Find section 1 header
     section1_match = SECTION_1_PATTERN.search(text)
