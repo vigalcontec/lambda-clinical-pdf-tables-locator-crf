@@ -124,7 +124,8 @@ resource "aws_iam_role_policy" "dynamodb_write" {
         Action = [
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
-          "dynamodb:GetItem"
+          "dynamodb:GetItem",
+          "dynamodb:Query"
         ]
         Resource = [
           local.dynamodb.clinical_pdf_jobs.table_arn
