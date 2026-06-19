@@ -87,7 +87,7 @@ def get_processed_tables(table_name: str, job_id: str) -> dict[str, str]:
     return processed
 
 
-@tracer.capture_method
+@tracer.capture_method(capture_response=False)
 def filter_pending_events(
     table_name: str,
     job_id: str,

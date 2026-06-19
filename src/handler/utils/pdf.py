@@ -284,7 +284,7 @@ def detect_tables_hybrid(page: fitz.Page, text: str, table_identifiers: list[dic
     return 0, False
 
 
-@tracer.capture_method
+@tracer.capture_method(capture_response=False)
 def analyze_pdf_pages(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Analyze all pages in a PDF for table content and product formulations.
 
