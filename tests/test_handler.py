@@ -485,8 +485,11 @@ Laboratory abnormalities observed in pooled datasets"""
         assert "Adverse reactions" in result[0]["description"]
         assert result[1]["table_number"] == 5
 
-    def test_extract_table_identifiers_multiline_title(self) -> None:
-        """Test table identifier extraction with multi-line title."""
+    def test_extract_table_identifiers_first_line_only(self) -> None:
+        """Test table identifier extraction takes only first line.
+
+        The actual complete title will be extracted by Textract using LAYOUT_TITLE blocks.
+        """
         from handler.utils.pdf import extract_table_identifiers
 
         text = """Table 9. Efficacy results – PALOMA-3 study (investigator assessment, intent-to-treat
@@ -499,7 +502,9 @@ Some other content here"""
         assert result[0]["table_number"] == 9
         assert "PALOMA-3" in result[0]["description"]
         assert "intent-to-treat" in result[0]["description"]
-        assert "population" in result[0]["description"]
+        # Note: "population" is on the second line, so it's NOT included
+        # The full title will be extracted by Textract
+        assert "population" not in result[0]["description"]
 
     def test_has_table_content_patterns_clinical_data(self) -> None:
         """Test detection of clinical table content patterns."""

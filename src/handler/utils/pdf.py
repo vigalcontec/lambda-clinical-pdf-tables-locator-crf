@@ -43,7 +43,8 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
     """Extract all table identifiers from text.
 
     Looks for pattern: "Table X: description" or "Table X. description"
-    Handles multi-line titles by reading until the next table or section marker.
+    Extracts only the first line/sentence as the title - the actual complete
+    title will be extracted by Textract using LAYOUT_TITLE blocks.
 
     Args:
         text: Page text content
@@ -58,34 +59,24 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
         table_num = int(match.group(1))
         start_pos = match.end()
 
-        # Find where the title ends (next Table marker, section number, or reasonable limit)
+        # Get text after "Table X: " or "Table X. "
         remaining_text = text[start_pos:]
 
-        # Simple end markers - no hardcoded table headers
+        # Stop at first newline - just get the first line as a basic identifier
         # The actual title will be extracted by Textract using LAYOUT_TITLE blocks
-        end_patterns = [
-            re.search(r"\bTable\s+\d+\s*[.:]", remaining_text, re.IGNORECASE),
-            re.search(r"\n\s*\d+\.\d+\s+[A-Z]", remaining_text),  # Section like "5.1 Pharmacodynamic"
-            re.search(r"\n\s*\n", remaining_text),  # Double newline (paragraph break)
-        ]
+        newline_pos = remaining_text.find("\n")
+        description = remaining_text[:newline_pos] if newline_pos != -1 else remaining_text[:200]
 
-        # Find the earliest end position
-        end_pos = len(remaining_text)
-        for pattern_match in end_patterns:
-            if pattern_match and pattern_match.start() < end_pos:
-                end_pos = pattern_match.start()
+        # Clean up whitespace
+        description = " ".join(description.split()).strip()
 
-        # Extract and clean the description
-        description = remaining_text[:end_pos]
-        # Normalize whitespace (join multi-line into single line)
-        description = " ".join(description.split())
-        # Limit length to avoid capturing too much
-        if len(description) > 300:
-            description = description[:300].rsplit(" ", 1)[0] + "..."
+        # Limit length for safety
+        if len(description) > 150:
+            description = description[:150].rsplit(" ", 1)[0] + "..."
 
         results.append({
             "table_number": table_num,
-            "description": description.strip()
+            "description": description
         })
 
     # Deduplicate by table_number, keeping the last occurrence (most likely the actual table header)
