@@ -9,9 +9,9 @@ from aws_lambda_powertools import Logger, Tracer
 logger = Logger()
 tracer = Tracer()
 
-# Regex pattern to capture full table identifier: "Table X: description"
+# Regex pattern to capture full table identifier: "Table X: description" or "Table X. description"
 TABLE_IDENTIFIER_PATTERN = re.compile(
-    r"\btable\s+(\d+)\s*:\s*([^\n]+)",
+    r"\btable\s+(\d+)\s*[.:]\s*([^\n]+)",
     re.IGNORECASE
 )
 

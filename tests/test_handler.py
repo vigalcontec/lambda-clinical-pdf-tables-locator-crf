@@ -468,6 +468,21 @@ class TestPdfUtils:
 
         assert result == []
 
+    def test_extract_table_identifiers_period_separator(self) -> None:
+        """Test table identifier extraction with period separator (Ibrance format)."""
+        from handler.utils.pdf import extract_table_identifiers
+
+        text = """Table 4.
+Adverse reactions based on pooled dataset from 3 randomised studies (N=872)
+Table 5.
+Laboratory abnormalities observed in pooled datasets"""
+        result = extract_table_identifiers(text)
+
+        assert len(result) == 2
+        assert result[0]["table_number"] == 4
+        assert "Adverse reactions" in result[0]["description"]
+        assert result[1]["table_number"] == 5
+
     def test_has_table_content_patterns_clinical_data(self) -> None:
         """Test detection of clinical table content patterns."""
         from handler.utils.pdf import has_table_content_patterns
