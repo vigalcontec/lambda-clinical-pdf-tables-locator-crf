@@ -87,6 +87,16 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
             re.search(r"\n\s*\n", remaining_text),  # Double newline (paragraph break)
             re.search(r"\n[A-Z][a-z]+\s+\n", remaining_text),  # Column header pattern
             re.search(r"\n\s*\(\s*N\s*=\s*\d+\s*\)", remaining_text),  # Sample size like (N=347)
+            # Common table column headers that indicate start of table data
+            re.search(r"\nSystem organ class\b", remaining_text, re.IGNORECASE),
+            re.search(r"\nFrequency\b", remaining_text, re.IGNORECASE),
+            re.search(r"\nPreferred term", remaining_text, re.IGNORECASE),
+            re.search(r"\nAll Grades\b", remaining_text, re.IGNORECASE),
+            re.search(r"\nGrade\s+\d", remaining_text, re.IGNORECASE),
+            re.search(r"\n\s*n\s*\(\s*%\s*\)", remaining_text),  # n (%) column header
+            re.search(r"\nEndpoint\b", remaining_text, re.IGNORECASE),
+            re.search(r"\nParameter\b", remaining_text, re.IGNORECASE),
+            re.search(r"\nCharacteristic", remaining_text, re.IGNORECASE),
         ]
 
         # Find the earliest end position
