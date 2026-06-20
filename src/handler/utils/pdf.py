@@ -9,11 +9,31 @@ from aws_lambda_powertools import Logger, Tracer
 logger = Logger()
 tracer = Tracer()
 
-# Regex pattern to capture full table identifier: "Table X: description" or "Table X. description"
+# Regex pattern to capture table identifier start: "Table X: " or "Table X. "
+# We capture the table number and then extract the full title separately
 TABLE_IDENTIFIER_PATTERN = re.compile(
-    r"\btable\s+(\d+)\s*[.:]\s*([^\n]+)",
+    r"\btable\s+(\d+)\s*[.:]\s*",
     re.IGNORECASE
 )
+
+# Common product type patterns (dosage forms) - ordered from most specific to least specific
+PRODUCT_TYPE_PATTERNS = [
+    "powder for concentrate for solution for infusion",
+    "concentrate for solution for infusion",
+    "powder for solution for injection",
+    "powder for solution for infusion",
+    "solution for injection",
+    "solution for infusion",
+    "suspension for injection",
+    "film-coated tablets",
+    "hard capsules",
+    "soft capsules",
+    "oral solution",
+    "pre-filled syringe",
+    "pre-filled pen",
+    "capsules",
+    "tablets",
+]
 
 # Patterns that indicate table content (for fallback detection)
 TABLE_CONTENT_PATTERNS = [
@@ -41,8 +61,8 @@ SECTION_2_PATTERN = re.compile(
 def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
     """Extract all table identifiers from text.
 
-    Looks for pattern: "Table X: description"
-    E.g., "Table 56: Efficacy results in KEYNOTE-B96..."
+    Looks for pattern: "Table X: description" or "Table X. description"
+    Handles multi-line titles by reading until the next table or section marker.
 
     Args:
         text: Page text content
@@ -50,14 +70,73 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
     Returns:
         List of dicts with table_number and description
     """
-    matches = TABLE_IDENTIFIER_PATTERN.findall(text)
-    return [
-        {
-            "table_number": int(num),
-            "description": desc.strip()
-        }
-        for num, desc in matches
-    ]
+    results = []
+    
+    # Find all table identifier positions
+    for match in TABLE_IDENTIFIER_PATTERN.finditer(text):
+        table_num = int(match.group(1))
+        start_pos = match.end()
+        
+        # Find where the title ends (next Table marker, section number, or reasonable limit)
+        remaining_text = text[start_pos:]
+        
+        # Look for end markers: next "Table X", section headers, double newline, or table data
+        end_patterns = [
+            re.search(r"\bTable\s+\d+\s*[.:]", remaining_text, re.IGNORECASE),
+            re.search(r"\n\s*\d+\.\d+\s+[A-Z]", remaining_text),  # Section like "5.1 Pharmacodynamic"
+            re.search(r"\n\s*\n", remaining_text),  # Double newline (paragraph break)
+            re.search(r"\n[A-Z][a-z]+\s+\n", remaining_text),  # Column header pattern
+            re.search(r"\n\s*\(\s*N\s*=\s*\d+\s*\)", remaining_text),  # Sample size like (N=347)
+        ]
+        
+        # Find the earliest end position
+        end_pos = len(remaining_text)
+        for pattern_match in end_patterns:
+            if pattern_match and pattern_match.start() < end_pos:
+                end_pos = pattern_match.start()
+        
+        # Extract and clean the description
+        description = remaining_text[:end_pos]
+        # Normalize whitespace (join multi-line into single line)
+        description = " ".join(description.split())
+        # Limit length to avoid capturing too much
+        if len(description) > 300:
+            description = description[:300].rsplit(" ", 1)[0] + "..."
+        
+        results.append({
+            "table_number": table_num,
+            "description": description.strip()
+        })
+    
+    # Deduplicate by table_number, keeping the last occurrence (most likely the actual table header)
+    seen_tables: dict[int, dict[str, Any]] = {}
+    for item in results:
+        seen_tables[item["table_number"]] = item
+    
+    return list(seen_tables.values())
+
+
+def extract_product_type(formulations: list[str]) -> str:
+    """Extract the product type (dosage form) from formulation names.
+
+    Looks for patterns like "film-coated tablets", "hard capsules",
+    "solution for injection", etc.
+
+    Args:
+        formulations: List of product formulation names
+
+    Returns:
+        Product type string, or "unknown" if not found
+    """
+    # Combine all formulations into one string for searching
+    combined = " ".join(formulations).lower()
+    
+    # Check each pattern (ordered from most specific to least specific)
+    for product_type in PRODUCT_TYPE_PATTERNS:
+        if product_type in combined:
+            return product_type
+    
+    return "unknown"
 
 
 def extract_product_formulations(text: str) -> list[str]:

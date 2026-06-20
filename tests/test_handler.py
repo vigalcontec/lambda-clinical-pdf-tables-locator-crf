@@ -441,23 +441,24 @@ class TestPdfUtils:
         """Test extracting table identifiers from text."""
         from handler.utils.pdf import extract_table_identifiers
 
-        text = "Table 1: Recommended dose modifications\nSome text\nTable 2: Adverse events"
+        text = "Table 1: Recommended dose modifications\n\nTable 2: Adverse events"
         result = extract_table_identifiers(text)
 
         assert len(result) == 2
         assert result[0]["table_number"] == 1
-        assert result[0]["description"] == "Recommended dose modifications"
+        assert "Recommended dose modifications" in result[0]["description"]
         assert result[1]["table_number"] == 2
 
     def test_extract_table_identifiers_case_insensitive(self) -> None:
         """Test table identifier extraction is case insensitive."""
         from handler.utils.pdf import extract_table_identifiers
 
-        text = "TABLE 5: Efficacy Results"
+        text = "TABLE 5: Efficacy Results\n\nSome other text"
         result = extract_table_identifiers(text)
 
         assert len(result) == 1
         assert result[0]["table_number"] == 5
+        assert "Efficacy Results" in result[0]["description"]
 
     def test_extract_table_identifiers_no_match(self) -> None:
         """Test when no table identifiers found."""
@@ -474,6 +475,7 @@ class TestPdfUtils:
 
         text = """Table 4.
 Adverse reactions based on pooled dataset from 3 randomised studies (N=872)
+
 Table 5.
 Laboratory abnormalities observed in pooled datasets"""
         result = extract_table_identifiers(text)
@@ -482,6 +484,46 @@ Laboratory abnormalities observed in pooled datasets"""
         assert result[0]["table_number"] == 4
         assert "Adverse reactions" in result[0]["description"]
         assert result[1]["table_number"] == 5
+
+    def test_extract_table_identifiers_multiline_title(self) -> None:
+        """Test table identifier extraction with multi-line title."""
+        from handler.utils.pdf import extract_table_identifiers
+
+        text = """Table 9. Efficacy results – PALOMA-3 study (investigator assessment, intent-to-treat
+population)
+
+Some other content here"""
+        result = extract_table_identifiers(text)
+
+        assert len(result) == 1
+        assert result[0]["table_number"] == 9
+        assert "PALOMA-3" in result[0]["description"]
+        assert "intent-to-treat" in result[0]["description"]
+        assert "population" in result[0]["description"]
+
+    def test_extract_product_type(self) -> None:
+        """Test extracting product type from formulations."""
+        from handler.utils.pdf import extract_product_type
+
+        # Film-coated tablets
+        formulations = ["IBRANCE 75 mg film-coated tablets", "IBRANCE 100 mg film-coated tablets"]
+        assert extract_product_type(formulations) == "film-coated tablets"
+
+        # Solution for injection
+        formulations = ["Tecentriq 1875 mg solution for injection"]
+        assert extract_product_type(formulations) == "solution for injection"
+
+        # Concentrate for solution for infusion
+        formulations = ["Tecentriq 840 mg concentrate for solution for infusion"]
+        assert extract_product_type(formulations) == "concentrate for solution for infusion"
+
+        # Hard capsules
+        formulations = ["SomeProduct 50 mg hard capsules"]
+        assert extract_product_type(formulations) == "hard capsules"
+
+        # Unknown
+        formulations = ["SomeProduct without dosage form"]
+        assert extract_product_type(formulations) == "unknown"
 
     def test_has_table_content_patterns_clinical_data(self) -> None:
         """Test detection of clinical table content patterns."""

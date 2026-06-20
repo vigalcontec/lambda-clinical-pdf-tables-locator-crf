@@ -4,6 +4,8 @@ from typing import Any
 
 from aws_lambda_powertools import Logger
 
+from handler.utils.pdf import extract_product_type
+
 logger = Logger()
 
 
@@ -48,7 +50,8 @@ def generate_textract_events(
                 "page": 7,
                 "table_index_on_page": 0,
                 "formulation_key": "840_1200mg",  # For multi-product PDFs
-                "formulations": ["Tecentriq 840 mg ...", "Tecentriq 1200 mg ..."]
+                "formulations": ["Tecentriq 840 mg ...", "Tecentriq 1200 mg ..."],
+                "product_type": "film-coated tablets"  # Dosage form
             },
             ...
         ]
@@ -104,10 +107,12 @@ def generate_textract_events(
                     "table_index_on_page": table_index,
                 }
 
-                # Add formulation info for multi-product PDFs
-                if is_multi_product and formulation_key:
+                # Add formulation info and product type
+                if formulation_key:
                     event["formulation_key"] = formulation_key
+                if formulations:
                     event["formulations"] = formulations
+                    event["product_type"] = extract_product_type(formulations)
 
                 textract_events.append(event)
 
@@ -129,10 +134,12 @@ def generate_textract_events(
                 "table_index_on_page": 0,  # Continuation pages have single table
             }
 
-            # Add formulation info for multi-product PDFs
-            if is_multi_product and formulation_key:
+            # Add formulation info and product type
+            if formulation_key:
                 event["formulation_key"] = formulation_key
+            if formulations:
                 event["formulations"] = formulations
+                event["product_type"] = extract_product_type(formulations)
 
             textract_events.append(event)
 
