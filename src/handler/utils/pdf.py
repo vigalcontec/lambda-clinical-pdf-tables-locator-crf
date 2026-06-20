@@ -71,15 +71,15 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
         List of dicts with table_number and description
     """
     results = []
-    
+
     # Find all table identifier positions
     for match in TABLE_IDENTIFIER_PATTERN.finditer(text):
         table_num = int(match.group(1))
         start_pos = match.end()
-        
+
         # Find where the title ends (next Table marker, section number, or reasonable limit)
         remaining_text = text[start_pos:]
-        
+
         # Look for end markers: next "Table X", section headers, double newline, or table data
         end_patterns = [
             re.search(r"\bTable\s+\d+\s*[.:]", remaining_text, re.IGNORECASE),
@@ -88,13 +88,13 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
             re.search(r"\n[A-Z][a-z]+\s+\n", remaining_text),  # Column header pattern
             re.search(r"\n\s*\(\s*N\s*=\s*\d+\s*\)", remaining_text),  # Sample size like (N=347)
         ]
-        
+
         # Find the earliest end position
         end_pos = len(remaining_text)
         for pattern_match in end_patterns:
             if pattern_match and pattern_match.start() < end_pos:
                 end_pos = pattern_match.start()
-        
+
         # Extract and clean the description
         description = remaining_text[:end_pos]
         # Normalize whitespace (join multi-line into single line)
@@ -102,17 +102,19 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
         # Limit length to avoid capturing too much
         if len(description) > 300:
             description = description[:300].rsplit(" ", 1)[0] + "..."
-        
+
         results.append({
             "table_number": table_num,
             "description": description.strip()
         })
-    
+
     # Deduplicate by table_number, keeping the last occurrence (most likely the actual table header)
     seen_tables: dict[int, dict[str, Any]] = {}
     for item in results:
-        seen_tables[item["table_number"]] = item
-    
+        tbl_num = item["table_number"]
+        if isinstance(tbl_num, int):
+            seen_tables[tbl_num] = item
+
     return list(seen_tables.values())
 
 
@@ -130,12 +132,12 @@ def extract_product_type(formulations: list[str]) -> str:
     """
     # Combine all formulations into one string for searching
     combined = " ".join(formulations).lower()
-    
+
     # Check each pattern (ordered from most specific to least specific)
     for product_type in PRODUCT_TYPE_PATTERNS:
         if product_type in combined:
             return product_type
-    
+
     return "unknown"
 
 
