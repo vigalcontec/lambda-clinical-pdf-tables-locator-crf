@@ -13,7 +13,7 @@ tracer = Tracer()
 s3_client = boto3.client("s3")
 
 
-@tracer.capture_method
+@tracer.capture_method(capture_response=False)
 def download_pdf_from_s3(bucket: str, key: str) -> bytes:
     """Download PDF from S3 directly into memory.
 
@@ -43,7 +43,7 @@ def generate_file_hash(pdf_bytes: bytes) -> str:
     return hashlib.sha256(pdf_bytes).hexdigest()
 
 
-@tracer.capture_method
+@tracer.capture_method(capture_response=False)
 def upload_json_to_s3(
     bucket: str,
     key: str,
