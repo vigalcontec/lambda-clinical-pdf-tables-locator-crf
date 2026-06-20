@@ -16,25 +16,6 @@ TABLE_IDENTIFIER_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Common product type patterns (dosage forms) - ordered from most specific to least specific
-PRODUCT_TYPE_PATTERNS = [
-    "powder for concentrate for solution for infusion",
-    "concentrate for solution for infusion",
-    "powder for solution for injection",
-    "powder for solution for infusion",
-    "solution for injection",
-    "solution for infusion",
-    "suspension for injection",
-    "film-coated tablets",
-    "hard capsules",
-    "soft capsules",
-    "oral solution",
-    "pre-filled syringe",
-    "pre-filled pen",
-    "capsules",
-    "tablets",
-]
-
 # Patterns that indicate table content (for fallback detection)
 TABLE_CONTENT_PATTERNS = [
     re.compile(r"\b(n\s*=\s*\d+)", re.IGNORECASE),  # Sample size: n = 467
@@ -80,23 +61,12 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
         # Find where the title ends (next Table marker, section number, or reasonable limit)
         remaining_text = text[start_pos:]
 
-        # Look for end markers: next "Table X", section headers, double newline, or table data
+        # Simple end markers - no hardcoded table headers
+        # The actual title will be extracted by Textract using LAYOUT_TITLE blocks
         end_patterns = [
             re.search(r"\bTable\s+\d+\s*[.:]", remaining_text, re.IGNORECASE),
             re.search(r"\n\s*\d+\.\d+\s+[A-Z]", remaining_text),  # Section like "5.1 Pharmacodynamic"
             re.search(r"\n\s*\n", remaining_text),  # Double newline (paragraph break)
-            re.search(r"\n[A-Z][a-z]+\s+\n", remaining_text),  # Column header pattern
-            re.search(r"\n\s*\(\s*N\s*=\s*\d+\s*\)", remaining_text),  # Sample size like (N=347)
-            # Common table column headers that indicate start of table data
-            re.search(r"\nSystem organ class\b", remaining_text, re.IGNORECASE),
-            re.search(r"\nFrequency\b", remaining_text, re.IGNORECASE),
-            re.search(r"\nPreferred term", remaining_text, re.IGNORECASE),
-            re.search(r"\nAll Grades\b", remaining_text, re.IGNORECASE),
-            re.search(r"\nGrade\s+\d", remaining_text, re.IGNORECASE),
-            re.search(r"\n\s*n\s*\(\s*%\s*\)", remaining_text),  # n (%) column header
-            re.search(r"\nEndpoint\b", remaining_text, re.IGNORECASE),
-            re.search(r"\nParameter\b", remaining_text, re.IGNORECASE),
-            re.search(r"\nCharacteristic", remaining_text, re.IGNORECASE),
         ]
 
         # Find the earliest end position
@@ -126,29 +96,6 @@ def extract_table_identifiers(text: str) -> list[dict[str, Any]]:
             seen_tables[tbl_num] = item
 
     return list(seen_tables.values())
-
-
-def extract_product_type(formulations: list[str]) -> str:
-    """Extract the product type (dosage form) from formulation names.
-
-    Looks for patterns like "film-coated tablets", "hard capsules",
-    "solution for injection", etc.
-
-    Args:
-        formulations: List of product formulation names
-
-    Returns:
-        Product type string, or "unknown" if not found
-    """
-    # Combine all formulations into one string for searching
-    combined = " ".join(formulations).lower()
-
-    # Check each pattern (ordered from most specific to least specific)
-    for product_type in PRODUCT_TYPE_PATTERNS:
-        if product_type in combined:
-            return product_type
-
-    return "unknown"
 
 
 def extract_product_formulations(text: str) -> list[str]:

@@ -501,30 +501,6 @@ Some other content here"""
         assert "intent-to-treat" in result[0]["description"]
         assert "population" in result[0]["description"]
 
-    def test_extract_product_type(self) -> None:
-        """Test extracting product type from formulations."""
-        from handler.utils.pdf import extract_product_type
-
-        # Film-coated tablets
-        formulations = ["IBRANCE 75 mg film-coated tablets", "IBRANCE 100 mg film-coated tablets"]
-        assert extract_product_type(formulations) == "film-coated tablets"
-
-        # Solution for injection
-        formulations = ["Tecentriq 1875 mg solution for injection"]
-        assert extract_product_type(formulations) == "solution for injection"
-
-        # Concentrate for solution for infusion
-        formulations = ["Tecentriq 840 mg concentrate for solution for infusion"]
-        assert extract_product_type(formulations) == "concentrate for solution for infusion"
-
-        # Hard capsules
-        formulations = ["SomeProduct 50 mg hard capsules"]
-        assert extract_product_type(formulations) == "hard capsules"
-
-        # Unknown
-        formulations = ["SomeProduct without dosage form"]
-        assert extract_product_type(formulations) == "unknown"
-
     def test_has_table_content_patterns_clinical_data(self) -> None:
         """Test detection of clinical table content patterns."""
         from handler.utils.pdf import has_table_content_patterns
