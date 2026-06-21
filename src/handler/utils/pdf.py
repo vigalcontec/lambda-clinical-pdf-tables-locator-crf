@@ -1,5 +1,6 @@
 """PDF analysis utility functions using PyMuPDF."""
 
+import hashlib
 import re
 from typing import Any
 
@@ -194,71 +195,30 @@ def detect_product_sections(pdf_bytes: bytes) -> list[dict[str, Any]]:
 def _create_formulation_key(formulations: list[str]) -> str:
     """Create a normalized key from formulation names.
 
-    Includes both the dosage amounts AND the formulation type (dosage form)
-    to differentiate between e.g. "hard capsules" and "film-coated tablets".
+    Uses a hash of the unique formulation list to differentiate between
+    different product sections. This approach:
+    - Works automatically for any dosage form (no hardcoded patterns)
+    - Creates unique keys based on the actual formulation names
+    - Handles new/unknown dosage forms without code changes
 
     Args:
-        formulations: List of formulation names
+        formulations: List of formulation names from "1. NAME OF THE MEDICINAL PRODUCT"
 
     Returns:
-        Normalized key string (e.g., "75_100_125mg_hard_capsules" or "840_1200mg_concentrate")
+        Normalized key string (short hash of the formulation list)
     """
-    # Extract doses from formulations (handles spaces in numbers like "1 200 mg")
-    doses = []
-    for f in formulations:
-        # Match digits with optional spaces before "mg"
-        match = re.search(r"([\d\s]+)\s*mg", f, re.IGNORECASE)
-        if match:
-            # Remove spaces from the dose number
-            dose = match.group(1).replace(" ", "")
-            if dose.isdigit():
-                doses.append(dose)
+    if not formulations:
+        return "unknown"
 
-    # Extract formulation type (dosage form) from the first formulation
-    formulation_type = _extract_formulation_type(formulations[0] if formulations else "")
+    # Sort and normalize the formulation names for consistent hashing
+    # This ensures the same formulations always produce the same key
+    normalized = "|".join(sorted(f.strip().lower() for f in formulations))
 
-    dose_part = "_".join(sorted(set(doses), key=int)) + "mg" if doses else "unknown"
+    # Create a short hash (first 12 chars of MD5) for a compact, unique key
+    # MD5 is fine here - we're not using it for security, just uniqueness
+    key_hash = hashlib.md5(normalized.encode()).hexdigest()[:12]
 
-    if formulation_type:
-        return f"{dose_part}_{formulation_type}"
-    return dose_part
-
-
-def _extract_formulation_type(formulation: str) -> str:
-    """Extract the formulation type (dosage form) from a formulation name.
-
-    Args:
-        formulation: Single formulation name string
-
-    Returns:
-        Normalized formulation type (e.g., "hard_capsules", "film_coated_tablets")
-    """
-    formulation_lower = formulation.lower()
-
-    # Check for common formulation types (ordered from most specific to least)
-    formulation_types = [
-        ("powder for concentrate for solution for infusion", "powder_concentrate_infusion"),
-        ("concentrate for solution for infusion", "concentrate_infusion"),
-        ("powder for solution for injection", "powder_injection"),
-        ("powder for solution for infusion", "powder_infusion"),
-        ("solution for injection", "solution_injection"),
-        ("solution for infusion", "solution_infusion"),
-        ("suspension for injection", "suspension_injection"),
-        ("film-coated tablets", "film_coated_tablets"),
-        ("hard capsules", "hard_capsules"),
-        ("soft capsules", "soft_capsules"),
-        ("oral solution", "oral_solution"),
-        ("pre-filled syringe", "prefilled_syringe"),
-        ("pre-filled pen", "prefilled_pen"),
-        ("capsules", "capsules"),
-        ("tablets", "tablets"),
-    ]
-
-    for pattern, key in formulation_types:
-        if pattern in formulation_lower:
-            return key
-
-    return ""
+    return key_hash
 
 
 def get_formulation_for_page(page_num: int, product_sections: list[dict]) -> dict[str, Any] | None:

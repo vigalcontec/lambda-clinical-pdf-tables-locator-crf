@@ -620,26 +620,11 @@ Tecentriq 1 875 mg solution for injection
     def test_create_formulation_key(self) -> None:
         """Test creating formulation key from formulation names.
 
-        Key now includes both dose AND formulation type to differentiate
-        e.g. hard capsules from film-coated tablets.
+        Key is now a hash of the unique formulation list, which:
+        - Works automatically for any dosage form (no hardcoded patterns)
+        - Creates unique keys based on the actual formulation names
         """
         from handler.utils.pdf import _create_formulation_key
-
-        # Multiple doses with concentrate for infusion
-        formulations = [
-            "Tecentriq 840 mg concentrate for solution for infusion",
-            "Tecentriq 1 200 mg concentrate for solution for infusion"
-        ]
-        key = _create_formulation_key(formulations)
-        assert "840" in key
-        assert "1200" in key
-        assert "concentrate_infusion" in key
-
-        # Single dose with solution for injection
-        formulations = ["Tecentriq 1 875 mg solution for injection"]
-        key = _create_formulation_key(formulations)
-        assert "1875" in key
-        assert "solution_injection" in key
 
         # Hard capsules vs film-coated tablets (same doses, different type)
         hard_capsules = ["IBRANCE 75 mg hard capsules", "IBRANCE 100 mg hard capsules"]
@@ -648,18 +633,36 @@ Tecentriq 1 875 mg solution for injection
         key_capsules = _create_formulation_key(hard_capsules)
         key_tablets = _create_formulation_key(film_tablets)
 
-        # Keys should be different due to formulation type
+        # Keys should be different due to different formulation names
         assert key_capsules != key_tablets
-        assert "hard_capsules" in key_capsules
-        assert "film_coated_tablets" in key_tablets
+        # Keys should be 12-char hex strings
+        assert len(key_capsules) == 12
+        assert len(key_tablets) == 12
 
-    def test_create_formulation_key_no_dose(self) -> None:
-        """Test formulation key when no dose found."""
+        # Same formulations should produce same key (deterministic)
+        key_capsules_again = _create_formulation_key(hard_capsules)
+        assert key_capsules == key_capsules_again
+
+        # Order shouldn't matter (sorted internally)
+        key_reversed = _create_formulation_key(list(reversed(hard_capsules)))
+        assert key_capsules == key_reversed
+
+    def test_create_formulation_key_different_products(self) -> None:
+        """Test formulation keys for different product types."""
         from handler.utils.pdf import _create_formulation_key
 
-        formulations = ["Some product without dose"]
-        key = _create_formulation_key(formulations)
-        assert key == "unknown"
+        # Keytruda formulations
+        keytruda_concentrate = ["KEYTRUDA 25 mg/mL concentrate for solution for infusion."]
+        keytruda_injection = [
+            "KEYTRUDA 395 mg solution for injection",
+            "KEYTRUDA 790 mg solution for injection"
+        ]
+
+        key_concentrate = _create_formulation_key(keytruda_concentrate)
+        key_injection = _create_formulation_key(keytruda_injection)
+
+        # Different formulations = different keys
+        assert key_concentrate != key_injection
 
     def test_create_formulation_key_empty(self) -> None:
         """Test formulation key with empty list."""
