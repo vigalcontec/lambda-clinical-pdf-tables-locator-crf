@@ -618,24 +618,40 @@ Tecentriq 1 875 mg solution for injection
         assert result is None
 
     def test_create_formulation_key(self) -> None:
-        """Test creating formulation key from formulation names."""
+        """Test creating formulation key from formulation names.
+
+        Key now includes both dose AND formulation type to differentiate
+        e.g. hard capsules from film-coated tablets.
+        """
         from handler.utils.pdf import _create_formulation_key
 
-        # Multiple doses
+        # Multiple doses with concentrate for infusion
         formulations = [
             "Tecentriq 840 mg concentrate for solution for infusion",
             "Tecentriq 1 200 mg concentrate for solution for infusion"
         ]
         key = _create_formulation_key(formulations)
         assert "840" in key
-        assert "1200" in key or "1_200" in key
-        assert key.endswith("mg")
+        assert "1200" in key
+        assert "concentrate_infusion" in key
 
-        # Single dose
+        # Single dose with solution for injection
         formulations = ["Tecentriq 1 875 mg solution for injection"]
         key = _create_formulation_key(formulations)
-        assert "1875" in key or "1_875" in key
-        assert key.endswith("mg")
+        assert "1875" in key
+        assert "solution_injection" in key
+
+        # Hard capsules vs film-coated tablets (same doses, different type)
+        hard_capsules = ["IBRANCE 75 mg hard capsules", "IBRANCE 100 mg hard capsules"]
+        film_tablets = ["IBRANCE 75 mg film-coated tablets", "IBRANCE 100 mg film-coated tablets"]
+
+        key_capsules = _create_formulation_key(hard_capsules)
+        key_tablets = _create_formulation_key(film_tablets)
+
+        # Keys should be different due to formulation type
+        assert key_capsules != key_tablets
+        assert "hard_capsules" in key_capsules
+        assert "film_coated_tablets" in key_tablets
 
     def test_create_formulation_key_no_dose(self) -> None:
         """Test formulation key when no dose found."""

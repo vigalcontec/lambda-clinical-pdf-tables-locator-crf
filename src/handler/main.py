@@ -118,7 +118,12 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> None:
         all_textract_events = generate_textract_events(page_info, bucket, key, product_name, job_id)
 
         # Count unique tables (before filtering)
-        unique_tables = len({e["table_number"] for e in all_textract_events})
+        # For multi-product PDFs, count tables per formulation type
+        # e.g., Table 1 for hard capsules and Table 1 for film-coated tablets = 2 unique tables
+        unique_tables = len({
+            (e["table_number"], e.get("formulation_key", ""))
+            for e in all_textract_events
+        })
 
         # Check if job already exists and filter to only pending tables
         # Skip this check if force_reprocess is True

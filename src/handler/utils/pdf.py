@@ -194,11 +194,14 @@ def detect_product_sections(pdf_bytes: bytes) -> list[dict[str, Any]]:
 def _create_formulation_key(formulations: list[str]) -> str:
     """Create a normalized key from formulation names.
 
+    Includes both the dosage amounts AND the formulation type (dosage form)
+    to differentiate between e.g. "hard capsules" and "film-coated tablets".
+
     Args:
         formulations: List of formulation names
 
     Returns:
-        Normalized key string (e.g., "840_1200mg" or "1875mg")
+        Normalized key string (e.g., "75_100_125mg_hard_capsules" or "840_1200mg_concentrate")
     """
     # Extract doses from formulations (handles spaces in numbers like "1 200 mg")
     doses = []
@@ -211,9 +214,51 @@ def _create_formulation_key(formulations: list[str]) -> str:
             if dose.isdigit():
                 doses.append(dose)
 
-    if doses:
-        return "_".join(sorted(set(doses), key=int)) + "mg"
-    return "unknown"
+    # Extract formulation type (dosage form) from the first formulation
+    formulation_type = _extract_formulation_type(formulations[0] if formulations else "")
+
+    dose_part = "_".join(sorted(set(doses), key=int)) + "mg" if doses else "unknown"
+
+    if formulation_type:
+        return f"{dose_part}_{formulation_type}"
+    return dose_part
+
+
+def _extract_formulation_type(formulation: str) -> str:
+    """Extract the formulation type (dosage form) from a formulation name.
+
+    Args:
+        formulation: Single formulation name string
+
+    Returns:
+        Normalized formulation type (e.g., "hard_capsules", "film_coated_tablets")
+    """
+    formulation_lower = formulation.lower()
+
+    # Check for common formulation types (ordered from most specific to least)
+    formulation_types = [
+        ("powder for concentrate for solution for infusion", "powder_concentrate_infusion"),
+        ("concentrate for solution for infusion", "concentrate_infusion"),
+        ("powder for solution for injection", "powder_injection"),
+        ("powder for solution for infusion", "powder_infusion"),
+        ("solution for injection", "solution_injection"),
+        ("solution for infusion", "solution_infusion"),
+        ("suspension for injection", "suspension_injection"),
+        ("film-coated tablets", "film_coated_tablets"),
+        ("hard capsules", "hard_capsules"),
+        ("soft capsules", "soft_capsules"),
+        ("oral solution", "oral_solution"),
+        ("pre-filled syringe", "prefilled_syringe"),
+        ("pre-filled pen", "prefilled_pen"),
+        ("capsules", "capsules"),
+        ("tablets", "tablets"),
+    ]
+
+    for pattern, key in formulation_types:
+        if pattern in formulation_lower:
+            return key
+
+    return ""
 
 
 def get_formulation_for_page(page_num: int, product_sections: list[dict]) -> dict[str, Any] | None:
