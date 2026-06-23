@@ -89,7 +89,7 @@ resource "aws_lambda_function" "main" {
 
   # Ephemeral storage for large PDF processing (default 512MB)
   ephemeral_storage {
-    size = 1024  # 1GB - needed for PyMuPDF temp files
+    size = 1024 # 1GB - needed for PyMuPDF temp files
   }
 
   tags = {
@@ -114,28 +114,65 @@ resource "aws_cloudwatch_log_group" "lambda" {
 }
 
 # -----------------------------------------------------------------------------
-# Lambda Permission - Allow S3 to invoke Lambda
+# EventBridge Rule - Trigger Lambda on PDF upload
 # -----------------------------------------------------------------------------
-resource "aws_lambda_permission" "s3" {
-  statement_id  = "AllowS3Invoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.main.function_name
-  principal     = "s3.amazonaws.com"
-  source_arn    = local.datalake.raw.bucket_arn
+# Uses EventBridge instead of S3 bucket notification to avoid conflicts with
+# the aws-datalake-layers module which manages the bucket notification.
+resource "aws_cloudwatch_event_rule" "pdf_upload" {
+  name        = "${local.full_name}-pdf-trigger"
+  description = "Trigger Locator Lambda when PDF is uploaded to S3"
+
+  event_pattern = jsonencode({
+    source      = ["aws.s3"]
+    detail-type = ["Object Created"]
+    detail = {
+      bucket = {
+        name = [local.datalake.raw.bucket_name]
+      }
+      object = {
+        key = [{
+          wildcard = "crf/clinical_pdfs/*.pdf"
+        }]
+      }
+    }
+  })
+
+  tags = local.common_tags
 }
 
 # -----------------------------------------------------------------------------
-# S3 Bucket Notification - Trigger Lambda on object creation
+# EventBridge Target - Lambda Function
 # -----------------------------------------------------------------------------
-resource "aws_s3_bucket_notification" "lambda_trigger" {
-  bucket = local.datalake.raw.bucket_name
+resource "aws_cloudwatch_event_target" "lambda" {
+  rule      = aws_cloudwatch_event_rule.pdf_upload.name
+  target_id = "TriggerLocatorLambda"
+  arn       = aws_lambda_function.main.arn
 
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.main.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = "crf/clinical_pdfs/"
-    filter_suffix       = ".pdf"
+  # Transform S3 event to Lambda input format
+  input_transformer {
+    input_paths = {
+      bucket = "$.detail.bucket.name"
+      key    = "$.detail.object.key"
+      size   = "$.detail.object.size"
+    }
+    input_template = <<EOF
+{
+  "source": "eventbridge",
+  "bucket": <bucket>,
+  "key": <key>,
+  "size": <size>
+}
+EOF
   }
+}
 
-  depends_on = [aws_lambda_permission.s3]
+# -----------------------------------------------------------------------------
+# Lambda Permission - Allow EventBridge to invoke Lambda
+# -----------------------------------------------------------------------------
+resource "aws_lambda_permission" "eventbridge" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.main.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.pdf_upload.arn
 }

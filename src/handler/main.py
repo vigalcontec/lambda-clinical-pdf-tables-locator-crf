@@ -53,7 +53,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> None:
 
     try:
         # Extract bucket and key from event
-        # Support both S3 trigger format and direct invocation format
+        # Support S3 trigger, EventBridge, and direct invocation formats
         if "Records" in event:
             # S3 trigger format
             record = event["Records"][0]
@@ -61,10 +61,14 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> None:
             key = record["s3"]["object"]["key"]
             # URL decode the key (S3 encodes special characters)
             key = unquote_plus(key)
+        elif event.get("source") == "eventbridge":
+            # EventBridge format (from input transformer)
+            bucket = event.get("bucket")
+            key = event.get("key")
         else:
             # Direct invocation format
-            bucket = event.get("s3_bucket")
-            key = event.get("s3_key")
+            bucket = event.get("s3_bucket") or event.get("bucket")
+            key = event.get("s3_key") or event.get("key")
 
         if not bucket or not key:
             raise ValueError("Missing 's3_bucket' or 's3_key' in event payload.")
